@@ -49,11 +49,10 @@ impl App {
     }
 
     fn get_novels_dir() -> PathBuf {
-        let mut path = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
-        path.pop(); // 移除二进制文件名
-        path.push("novel");
+        let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        path.push(".fish_reader");
+        path.push("novels");
 
-        // 如果目录不存在，创建它
         if !path.exists() {
             let _ = std::fs::create_dir_all(&path);
         }
@@ -92,7 +91,8 @@ impl App {
         let mut last_tick = Instant::now();
 
         while !self.should_quit {
-            self.terminal_size = terminal.size()?;
+            let size = terminal.size()?;
+            self.terminal_size = Rect::new(0, 0, size.width, size.height);
 
             terminal.draw(|f| self.ui(f))?;
 
@@ -135,7 +135,7 @@ impl App {
     }
 
     fn render_bookshelf(&self, f: &mut Frame) {
-        let area = f.size();
+        let area = f.area();
 
         // 创建书架标题
         let title = Paragraph::new("小说阅读器 - 书架")
@@ -202,7 +202,7 @@ impl App {
 
     fn render_reader(&self, f: &mut Frame) {
         if let Some(novel) = &self.current_novel {
-            let area = f.size();
+            let area = f.area();
 
             // 创建标题
             let title = Paragraph::new(format!("阅读中: {}", novel.title))

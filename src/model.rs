@@ -85,8 +85,13 @@ impl Library {
     }
 
     pub fn get_progress_path() -> PathBuf {
-        let mut path = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
-        path.pop(); // 移除二进制文件名
+        let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        path.push(".fish_reader");
+
+        if !path.exists() {
+            let _ = std::fs::create_dir_all(&path);
+        }
+
         path.push("progress.json");
         path
     }
