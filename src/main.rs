@@ -146,7 +146,7 @@ impl App {
             x: area.x,
             y: area.y,
             width: area.width,
-            height: 3,
+            height: 2,
         };
 
         f.render_widget(title, title_area);
@@ -174,9 +174,9 @@ impl App {
 
         let list_area = Rect {
             x: area.x + 2,
-            y: area.y + 4,
+            y: area.y + 2,
             width: area.width - 4,
-            height: area.height - 7,
+            height: area.height - 5,
         };
 
         let mut state = ListState::default();
