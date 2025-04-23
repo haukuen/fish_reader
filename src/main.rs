@@ -155,15 +155,22 @@ impl App {
         let items: Vec<ListItem> = self
             .novels
             .iter()
-            .map(|novel| {
-                ListItem::new(novel.title.clone()).style(Style::default().fg(Color::White))
+            .enumerate()
+            .map(|(index, novel)| {
+                let prefix = if Some(index) == self.selected_novel_index {
+                    ">> "
+                } else {
+                    "   "
+                };
+                ListItem::new(format!("{}{}", prefix, novel.title))
+                    .style(Style::default().fg(Color::White))
             })
             .collect();
 
         let novels_list = List::new(items)
             .block(Block::default().borders(Borders::ALL).title("可用小说"))
             .highlight_style(Style::default().bg(Color::DarkGray))
-            .highlight_symbol(">> ");
+            .highlight_symbol("");
 
         let list_area = Rect {
             x: area.x + 2,
@@ -282,9 +289,14 @@ impl App {
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 if !self.novels.is_empty() {
-                    let current = self.selected_novel_index.unwrap_or(0);
-                    let next = (current + 1) % self.novels.len();
-                    self.selected_novel_index = Some(next);
+                    // 如果当前没有选中任何小说，则选中第一本
+                    if self.selected_novel_index.is_none() {
+                        self.selected_novel_index = Some(0);
+                    } else {
+                        let current = self.selected_novel_index.unwrap();
+                        let next = (current + 1) % self.novels.len();
+                        self.selected_novel_index = Some(next);
+                    }
                 }
             }
             KeyCode::Enter => {
