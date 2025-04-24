@@ -31,19 +31,10 @@ impl Novel {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub struct ReadingProgress {
     pub line: usize,
     pub scroll_offset: usize,
-}
-
-impl Default for ReadingProgress {
-    fn default() -> Self {
-        ReadingProgress {
-            line: 0,
-            scroll_offset: 0,
-        }
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
