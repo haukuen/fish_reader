@@ -320,7 +320,13 @@ impl App {
         if let Some(novel) = &mut self.current_novel {
             let lines: Vec<&str> = novel.content.lines().collect();
             let max_scroll = lines.len().saturating_sub(1);
-            let page_size = self.terminal_size.height as usize - 5; // 减去标题和帮助区域
+
+            // 精确计算内容区域高度（标题2行 + 帮助信息3行 + 边框）
+            let content_height = (self.terminal_size.height as usize)
+                .saturating_sub(2 + 3) // 标题2行 + 帮助信息3行
+                .saturating_sub(2) // 上下边框各占1行
+                .saturating_sub(1); // 减去1行，方便阅读
+            let page_size = content_height.max(1);
 
             match key {
                 KeyCode::Char('q') | KeyCode::Char('Q') => {
@@ -350,15 +356,15 @@ impl App {
                     }
                 }
                 KeyCode::Left | KeyCode::Char('h') => {
-                    // 向上翻页
+                    // 向上翻页（使用修正后的页面尺寸）
                     novel.progress.scroll_offset =
                         novel.progress.scroll_offset.saturating_sub(page_size);
                 }
                 KeyCode::Right | KeyCode::Char('l') => {
-                    // 向下翻页
-                    let new_offset = novel.progress.scroll_offset + page_size;
+                    // 精确边界控制：确保不超过最大可滚动行数
+                    let max_offset = lines.len().saturating_sub(content_height);
                     novel.progress.scroll_offset =
-                        new_offset.min(max_scroll.saturating_sub(page_size));
+                        (novel.progress.scroll_offset + page_size).min(max_offset);
                 }
                 _ => {}
             }
