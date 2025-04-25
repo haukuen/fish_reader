@@ -19,16 +19,26 @@ enum AppState {
 }
 
 struct App {
+    /// 当前应用状态（书架/阅读模式）
     state: AppState,
+    /// 持久化存储处理器
     library: Library,
+    /// 发现的小说列表
     novels: Vec<Novel>,
+    /// 书架选中的小说索引
     selected_novel_index: Option<usize>,
+    /// 当前正在阅读的小说
     current_novel: Option<Novel>,
+    /// 退出标志位
     should_quit: bool,
+    /// 终端尺寸缓存
     terminal_size: Rect,
 }
 
 impl App {
+    /// 初始化应用程序
+    /// # 流程
+    /// 1. 加载历史进度 2. 扫描小说目录
     fn new() -> Result<Self> {
         // 加载阅读进度
         let library = Library::load();
@@ -316,6 +326,11 @@ impl App {
         }
     }
 
+    /// 处理阅读器模式下的键盘事件
+    /// # 参数
+    /// - `key`: 按下的键位代码
+    /// # 功能
+    /// 实现滚动控制、进度保存和界面切换
     fn handle_reader_key(&mut self, key: KeyCode) {
         if let Some(novel) = &mut self.current_novel {
             let lines: Vec<&str> = novel.content.lines().collect();
