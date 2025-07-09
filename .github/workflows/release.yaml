@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     name: Build for ${{ matrix.target }}
@@ -83,12 +87,10 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
           body: |
             ## Fish Reader ${{ github.ref_name }}
             
@@ -97,7 +99,6 @@ jobs:
             - macOS x64 (Intel)
             - macOS ARM64 (Apple Silicon)
             - Linux x64
-
             
             ### 使用方法
             1. 下载对应平台的二进制文件
@@ -112,44 +113,8 @@ jobs:
             - `p`: 返回书架
           draft: false
           prerelease: false
-
-      # 上传各平台的二进制文件
-      - name: Upload Windows x64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/fish_reader-windows-x64.exe/fish_reader-windows-x64.exe
-          asset_name: fish_reader-windows-x64.exe
-          asset_content_type: application/octet-stream
-
-      - name: Upload macOS x64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/fish_reader-macos-x64/fish_reader-macos-x64
-          asset_name: fish_reader-macos-x64
-          asset_content_type: application/octet-stream
-
-      - name: Upload macOS ARM64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/fish_reader-macos-arm64/fish_reader-macos-arm64
-          asset_name: fish_reader-macos-arm64
-          asset_content_type: application/octet-stream
-
-      - name: Upload Linux x64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/fish_reader-linux-x64/fish_reader-linux-x64
-          asset_name: fish_reader-linux-x64
-          asset_content_type: application/octet-stream
+          files: |
+            artifacts/fish_reader-windows-x64.exe/fish_reader-windows-x64.exe
+            artifacts/fish_reader-macos-x64/fish_reader-macos-x64
+            artifacts/fish_reader-macos-arm64/fish_reader-macos-arm64
+            artifacts/fish_reader-linux-x64/fish_reader-linux-x64
