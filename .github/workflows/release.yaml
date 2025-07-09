@@ -36,11 +36,7 @@ jobs:
             artifact_name: fish_reader
             asset_name: fish_reader-linux-x64
           
-          # Linux ARM64
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: fish_reader
-            asset_name: fish_reader-linux-arm64
+
 
     steps:
       - name: Checkout code
@@ -51,12 +47,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # Linux ARM64 需要交叉编译工具
-      - name: Install dependencies for Linux ARM64
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
@@ -106,7 +97,7 @@ jobs:
             - macOS x64 (Intel)
             - macOS ARM64 (Apple Silicon)
             - Linux x64
-            - Linux ARM64
+
             
             ### 使用方法
             1. 下载对应平台的二进制文件
@@ -161,14 +152,4 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/fish_reader-linux-x64/fish_reader-linux-x64
           asset_name: fish_reader-linux-x64
-          asset_content_type: application/octet-stream
-
-      - name: Upload Linux ARM64
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/fish_reader-linux-arm64/fish_reader-linux-arm64
-          asset_name: fish_reader-linux-arm64
           asset_content_type: application/octet-stream
