@@ -1,0 +1,174 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    name: Build for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # Windows x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: fish_reader.exe
+            asset_name: fish_reader-windows-x64.exe
+          
+          # macOS x64 (Intel)
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: fish_reader
+            asset_name: fish_reader-macos-x64
+          
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: fish_reader
+            asset_name: fish_reader-macos-arm64
+          
+          # Linux x64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: fish_reader
+            asset_name: fish_reader-linux-x64
+          
+          # Linux ARM64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: fish_reader
+            asset_name: fish_reader-linux-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Linux ARM64 需要交叉编译工具
+      - name: Install dependencies for Linux ARM64
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+          else
+            cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+            chmod +x ${{ matrix.asset_name }}
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |
+            ## Fish Reader ${{ github.ref_name }}
+            
+            ### 支持的平台
+            - Windows x64
+            - macOS x64 (Intel)
+            - macOS ARM64 (Apple Silicon)
+            - Linux x64
+            - Linux ARM64
+            
+            ### 使用方法
+            1. 下载对应平台的二进制文件
+            2. 将小说文件（.txt格式）放入 `~/.fish_reader/novels/` 目录
+            3. 运行程序开始阅读
+            
+            ### 快捷键
+            - `↑/k`: 上移  `↓/j`: 下移
+            - `Enter`: 选择/确认
+            - `q`: 退出
+            - `/`: 搜索
+            - `p`: 返回书架
+          draft: false
+          prerelease: false
+
+      # 上传各平台的二进制文件
+      - name: Upload Windows x64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/fish_reader-windows-x64.exe/fish_reader-windows-x64.exe
+          asset_name: fish_reader-windows-x64.exe
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS x64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/fish_reader-macos-x64/fish_reader-macos-x64
+          asset_name: fish_reader-macos-x64
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS ARM64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/fish_reader-macos-arm64/fish_reader-macos-arm64
+          asset_name: fish_reader-macos-arm64
+          asset_content_type: application/octet-stream
+
+      - name: Upload Linux x64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/fish_reader-linux-x64/fish_reader-linux-x64
+          asset_name: fish_reader-linux-x64
+          asset_content_type: application/octet-stream
+
+      - name: Upload Linux ARM64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: artifacts/fish_reader-linux-arm64/fish_reader-linux-arm64
+          asset_name: fish_reader-linux-arm64
+          asset_content_type: application/octet-stream

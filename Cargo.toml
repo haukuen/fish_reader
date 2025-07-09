@@ -2,6 +2,19 @@
 name = "fish_reader"
 version = "0.1.0"
 edition = "2024"
+authors = ["haukuen"]
+description = "A terminal-based novel reader with bookshelf management"
+license = "MIT"
+repository = "https://github.com/haukuen/fish_reader"
+keywords = ["terminal", "reader", "novel", "tui"]
+categories = ["command-line-utilities"]
+
+[profile.release]
+opt-level = 3       
+lto = true            
+codegen-units = 1    
+panic = "abort"     
+strip = true
 
 [dependencies]
 ratatui = "0.29.0"
