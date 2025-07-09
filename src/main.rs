@@ -481,7 +481,7 @@ impl App {
         }
 
         // 创建帮助信息
-         let help_text = "输入搜索内容 | ↑/↓: 选择结果 | Enter: 跳转 | Esc: 返回";
+        let help_text = "输入搜索内容 | ↑/↓: 选择结果 | Enter: 跳转 | Esc: 返回";
         let help = Paragraph::new(help_text)
             .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center);
@@ -508,20 +508,21 @@ impl App {
                 self.state = self.previous_state.clone();
             }
             KeyCode::Enter => {
-                 if let Some(index) = self.selected_search_index {
-                     // 跳转到选中的搜索结果
-                     if index < self.search_results.len() {
-                         let (line_num, _) = self.search_results[index];
-                         if let Some(novel) = &mut self.current_novel {
-                             novel.progress.scroll_offset = line_num;
-                             // 保存进度
-                             self.library.update_novel_progress(&novel.path, novel.progress);
-                             let _ = self.library.save();
-                         }
-                         self.state = AppState::Reading;
-                     }
-                 }
-             }
+                if let Some(index) = self.selected_search_index {
+                    // 跳转到选中的搜索结果
+                    if index < self.search_results.len() {
+                        let (line_num, _) = self.search_results[index];
+                        if let Some(novel) = &mut self.current_novel {
+                            novel.progress.scroll_offset = line_num;
+                            // 保存进度
+                            self.library
+                                .update_novel_progress(&novel.path, novel.progress);
+                            let _ = self.library.save();
+                        }
+                        self.state = AppState::Reading;
+                    }
+                }
+            }
             KeyCode::Up => {
                 if !self.search_results.is_empty() {
                     let current = self.selected_search_index.unwrap_or(0);
@@ -545,17 +546,17 @@ impl App {
                 }
             }
             KeyCode::Backspace => {
-                 // 删除搜索输入的最后一个字符
-                 self.search_input.pop();
-                 // 自动执行搜索
-                 self.perform_search();
-             }
+                // 删除搜索输入的最后一个字符
+                self.search_input.pop();
+                // 自动执行搜索
+                self.perform_search();
+            }
             KeyCode::Char(c) => {
-                 // 添加字符到搜索输入
-                 self.search_input.push(c);
-                 // 自动执行搜索（避免中文输入法拼音状态）
-                 self.perform_search();
-             }
+                // 添加字符到搜索输入
+                self.search_input.push(c);
+                // 自动执行搜索（避免中文输入法拼音状态）
+                self.perform_search();
+            }
             _ => {}
         }
     }
@@ -568,18 +569,22 @@ impl App {
             if !self.search_input.is_empty() {
                 let lines: Vec<&str> = novel.content.lines().collect();
                 self.search_results.clear();
-                
+
                 for (line_num, line) in lines.iter().enumerate() {
-                    if line.to_lowercase().contains(&self.search_input.to_lowercase()) {
+                    if line
+                        .to_lowercase()
+                        .contains(&self.search_input.to_lowercase())
+                    {
                         self.search_results.push((line_num, line.to_string()));
                     }
                 }
-                
+
                 // 更新选中索引，确保不越界
                 if !self.search_results.is_empty() {
                     // 如果之前没有选中或选中索引越界，则选中第一个
-                    if self.selected_search_index.is_none() 
-                        || self.selected_search_index.unwrap() >= self.search_results.len() {
+                    if self.selected_search_index.is_none()
+                        || self.selected_search_index.unwrap() >= self.search_results.len()
+                    {
                         self.selected_search_index = Some(0);
                     }
                 } else {
@@ -601,4 +606,388 @@ fn main() -> Result<()> {
     app.run().context("运行应用失败")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    /// 测试应用状态枚举的克隆功能
+    #[test]
+    fn test_app_state_clone() {
+        let state = AppState::Bookshelf;
+        let cloned_state = state.clone();
+
+        // 由于AppState没有实现PartialEq，我们通过模式匹配来验证
+        match (state, cloned_state) {
+            (AppState::Bookshelf, AppState::Bookshelf) => {}
+            _ => panic!("AppState clone failed"),
+        }
+    }
+
+    /// 测试应用初始化功能
+    #[test]
+    fn test_app_new() -> Result<()> {
+        let app = App::new()?;
+
+        // 验证初始状态
+        assert!(matches!(app.state, AppState::Bookshelf));
+        assert_eq!(app.selected_novel_index, None);
+        assert_eq!(app.current_novel, None);
+        assert_eq!(app.should_quit, false);
+        assert_eq!(app.search_input, "");
+        assert!(app.search_results.is_empty());
+        assert_eq!(app.selected_search_index, None);
+
+        Ok(())
+    }
+
+    /// 测试小说目录获取功能
+    #[test]
+    fn test_get_novels_dir() {
+        let novels_dir = App::get_novels_dir();
+
+        // 验证路径包含正确的目录结构
+        assert!(novels_dir.to_string_lossy().contains(".fish_reader"));
+        assert!(novels_dir.to_string_lossy().contains("novels"));
+    }
+
+    /// 测试从目录加载小说功能
+    #[test]
+    fn test_load_novels_from_dir() -> std::io::Result<()> {
+        let dir = tempdir()?;
+
+        // 创建测试小说文件
+        let novel1_path = dir.path().join("novel1.txt");
+        let novel2_path = dir.path().join("novel2.txt");
+        let non_txt_path = dir.path().join("readme.md");
+
+        fs::write(&novel1_path, "第一章\n这是第一本小说的内容")?;
+        fs::write(&novel2_path, "序章\n这是第二本小说的内容")?;
+        fs::write(&non_txt_path, "这不是小说文件")?;
+
+        let novels = App::load_novels_from_dir(dir.path()).unwrap();
+
+        // 验证只加载了txt文件
+        assert_eq!(novels.len(), 2);
+
+        // 验证小说标题正确提取
+        let titles: Vec<&str> = novels.iter().map(|n| n.title.as_str()).collect();
+        assert!(titles.contains(&"novel1"));
+        assert!(titles.contains(&"novel2"));
+
+        // 验证内容正确加载
+        let novel1 = novels.iter().find(|n| n.title == "novel1").unwrap();
+        assert!(novel1.content.contains("第一章"));
+
+        Ok(())
+    }
+
+    /// 测试从不存在的目录加载小说
+    #[test]
+    fn test_load_novels_from_nonexistent_dir() {
+        let non_existent_path = PathBuf::from("/tmp/non_existent_novels_dir_12345");
+        let novels = App::load_novels_from_dir(&non_existent_path).unwrap();
+
+        // 应该返回空的小说列表
+        assert!(novels.is_empty());
+    }
+
+    /// 测试书架模式下的键盘处理
+    #[test]
+    fn test_handle_bookshelf_key() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 测试退出键
+        app.handle_bookshelf_key(KeyCode::Char('q'));
+        assert!(app.should_quit);
+
+        // 重置状态
+        app.should_quit = false;
+        app.handle_bookshelf_key(KeyCode::Char('Q'));
+        assert!(app.should_quit);
+
+        Ok(())
+    }
+
+    /// 测试书架导航功能
+    #[test]
+    fn test_bookshelf_navigation() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 模拟有3本小说的情况
+        app.novels = vec![
+            Novel::new(PathBuf::from("novel1.txt")),
+            Novel::new(PathBuf::from("novel2.txt")),
+            Novel::new(PathBuf::from("novel3.txt")),
+        ];
+
+        // 测试向下导航
+        app.handle_bookshelf_key(KeyCode::Down);
+        assert_eq!(app.selected_novel_index, Some(0));
+
+        app.handle_bookshelf_key(KeyCode::Down);
+        assert_eq!(app.selected_novel_index, Some(1));
+
+        app.handle_bookshelf_key(KeyCode::Down);
+        assert_eq!(app.selected_novel_index, Some(2));
+
+        // 测试循环到开头
+        app.handle_bookshelf_key(KeyCode::Down);
+        assert_eq!(app.selected_novel_index, Some(0));
+
+        // 测试向上导航
+        app.handle_bookshelf_key(KeyCode::Up);
+        assert_eq!(app.selected_novel_index, Some(2));
+
+        // 测试vim风格的键位
+        app.handle_bookshelf_key(KeyCode::Char('j'));
+        assert_eq!(app.selected_novel_index, Some(0));
+
+        app.handle_bookshelf_key(KeyCode::Char('k'));
+        assert_eq!(app.selected_novel_index, Some(2));
+
+        Ok(())
+    }
+
+    /// 测试空书架的导航
+    #[test]
+    fn test_empty_bookshelf_navigation() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 确保小说列表为空
+        app.novels.clear();
+
+        // 测试在空列表中导航不会崩溃
+        app.handle_bookshelf_key(KeyCode::Down);
+        assert_eq!(app.selected_novel_index, None);
+
+        app.handle_bookshelf_key(KeyCode::Up);
+        assert_eq!(app.selected_novel_index, None);
+
+        Ok(())
+    }
+
+    /// 测试搜索功能
+    #[test]
+    fn test_search_functionality() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置当前小说
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.content = "第一章 开始\n第二章 发展\n第三章 高潮\n第四章 结局".to_string();
+        app.current_novel = Some(novel);
+
+        // 设置搜索输入
+        app.search_input = "第".to_string();
+        app.perform_search();
+
+        // 验证搜索结果
+        assert_eq!(app.search_results.len(), 4); // 所有行都包含"第"
+        assert_eq!(app.selected_search_index, Some(0));
+
+        // 测试更具体的搜索
+        app.search_input = "高潮".to_string();
+        app.perform_search();
+
+        assert_eq!(app.search_results.len(), 1);
+        assert_eq!(app.search_results[0].0, 2); // 第三行（索引2）
+        assert!(app.search_results[0].1.contains("高潮"));
+
+        // 测试空搜索
+        app.search_input.clear();
+        app.perform_search();
+
+        assert!(app.search_results.is_empty());
+        assert_eq!(app.selected_search_index, None);
+
+        Ok(())
+    }
+
+    /// 测试搜索模式下的键盘处理
+    #[test]
+    fn test_search_key_handling() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置搜索模式
+        app.state = AppState::Searching;
+        app.previous_state = AppState::Reading;
+
+        // 测试ESC键返回上一状态
+        app.handle_search_key(KeyCode::Esc);
+        assert!(matches!(app.state, AppState::Reading));
+
+        // 重置到搜索模式
+        app.state = AppState::Searching;
+
+        // 测试字符输入
+        app.handle_search_key(KeyCode::Char('测'));
+        app.handle_search_key(KeyCode::Char('试'));
+        assert_eq!(app.search_input, "测试");
+
+        // 测试退格键
+        app.handle_search_key(KeyCode::Backspace);
+        assert_eq!(app.search_input, "测");
+
+        Ok(())
+    }
+
+    /// 测试搜索结果导航
+    #[test]
+    fn test_search_results_navigation() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置搜索结果
+        app.search_results = vec![
+            (0, "第一行".to_string()),
+            (2, "第三行".to_string()),
+            (4, "第五行".to_string()),
+        ];
+
+        // 测试向下导航
+        app.handle_search_key(KeyCode::Down);
+        assert_eq!(app.selected_search_index, Some(0));
+
+        app.handle_search_key(KeyCode::Down);
+        assert_eq!(app.selected_search_index, Some(1));
+
+        app.handle_search_key(KeyCode::Down);
+        assert_eq!(app.selected_search_index, Some(2));
+
+        // 测试循环到开头
+        app.handle_search_key(KeyCode::Down);
+        assert_eq!(app.selected_search_index, Some(0));
+
+        // 测试向上导航
+        app.handle_search_key(KeyCode::Up);
+        assert_eq!(app.selected_search_index, Some(2));
+
+        Ok(())
+    }
+
+    /// 测试阅读器模式下的滚动功能
+    #[test]
+    fn test_reader_scrolling() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置当前小说和终端尺寸
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.content = (0..100)
+            .map(|i| format!("第{}行内容", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        app.current_novel = Some(novel);
+        app.terminal_size = Rect::new(0, 0, 80, 24);
+
+        // 测试向下滚动
+        app.handle_reader_key(KeyCode::Down);
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            1
+        );
+
+        app.handle_reader_key(KeyCode::Char('j'));
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            2
+        );
+
+        // 测试向上滚动
+        app.handle_reader_key(KeyCode::Up);
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            1
+        );
+
+        app.handle_reader_key(KeyCode::Char('k'));
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            0
+        );
+
+        // 测试不能向上滚动超过开头
+        app.handle_reader_key(KeyCode::Up);
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            0
+        );
+
+        Ok(())
+    }
+
+    /// 测试阅读器模式下的翻页功能
+    #[test]
+    fn test_reader_paging() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置当前小说和终端尺寸
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.content = (0..100)
+            .map(|i| format!("第{}行内容", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        app.current_novel = Some(novel);
+        app.terminal_size = Rect::new(0, 0, 80, 24);
+
+        // 测试向右翻页（向下）
+        app.handle_reader_key(KeyCode::Right);
+        let first_page_offset = app.current_novel.as_ref().unwrap().progress.scroll_offset;
+        assert!(first_page_offset > 0);
+
+        app.handle_reader_key(KeyCode::Char('l'));
+        let second_page_offset = app.current_novel.as_ref().unwrap().progress.scroll_offset;
+        assert!(second_page_offset > first_page_offset);
+
+        // 测试向左翻页（向上）
+        app.handle_reader_key(KeyCode::Left);
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            first_page_offset
+        );
+
+        app.handle_reader_key(KeyCode::Char('h'));
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            0
+        );
+
+        Ok(())
+    }
+
+    /// 测试阅读器模式下的状态切换
+    #[test]
+    fn test_reader_state_transitions() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置阅读状态
+        app.state = AppState::Reading;
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.content = "测试内容".to_string();
+        app.current_novel = Some(novel);
+
+        // 测试进入搜索模式
+        app.handle_reader_key(KeyCode::Char('/'));
+        assert!(matches!(app.state, AppState::Searching));
+        assert!(matches!(app.previous_state, AppState::Reading));
+        assert!(app.search_input.is_empty());
+        assert!(app.search_results.is_empty());
+
+        // 重置状态
+        app.state = AppState::Reading;
+
+        // 测试返回书架
+        app.handle_reader_key(KeyCode::Char('p'));
+        assert!(matches!(app.state, AppState::Bookshelf));
+
+        // 重置状态
+        app.state = AppState::Reading;
+
+        // 测试退出
+        app.handle_reader_key(KeyCode::Char('q'));
+        assert!(app.should_quit);
+
+        Ok(())
+    }
 }
