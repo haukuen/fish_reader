@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 
 permissions:
   contents: write
@@ -21,26 +21,24 @@ jobs:
             target: x86_64-pc-windows-msvc
             artifact_name: fish_reader.exe
             asset_name: fish_reader-windows-x64.exe
-          
+
           # macOS x64 (Intel)
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: fish_reader
             asset_name: fish_reader-macos-x64
-          
+
           # macOS ARM64 (Apple Silicon)
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: fish_reader
             asset_name: fish_reader-macos-arm64
-          
+
           # Linux x64
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-linux-gnu
             artifact_name: fish_reader
             asset_name: fish_reader-linux-x64
-          
-
 
     steps:
       - name: Checkout code
@@ -50,8 +48,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
-
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
@@ -93,18 +89,18 @@ jobs:
           name: Release ${{ github.ref_name }}
           body: |
             ## Fish Reader ${{ github.ref_name }}
-            
+
             ### 支持的平台
             - Windows x64
             - macOS x64 (Intel)
             - macOS ARM64 (Apple Silicon)
             - Linux x64
-            
+
             ### 使用方法
             1. 下载对应平台的二进制文件
             2. 将小说文件（.txt格式）放入 `~/.fish_reader/novels/` 目录
             3. 运行程序开始阅读
-            
+
             ### 快捷键
             - `↑/k`: 上移  `↓/j`: 下移
             - `Enter`: 选择/确认
