@@ -7,7 +7,7 @@ pub struct Novel {
     pub title: String,
     /// 小说文件的绝对路径
     pub path: PathBuf,
-    /// 小说文本内容（懒加载）
+    /// 小说文本内容
     pub content: String,
     /// 当前阅读进度
     pub progress: ReadingProgress,
@@ -40,10 +40,8 @@ impl Novel {
 }
 
 /// 阅读进度跟踪结构
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub struct ReadingProgress {
-    /// 当前阅读行号（基于0的索引）
-    pub line: usize,
     /// 滚动偏移量（用于界面渲染）
     pub scroll_offset: usize,
 }
@@ -144,7 +142,6 @@ mod tests {
         assert_eq!(novel.title, "test_novel");
         assert_eq!(novel.path, path);
         assert!(novel.content.is_empty());
-        assert_eq!(novel.progress.line, 0);
         assert_eq!(novel.progress.scroll_offset, 0);
     }
 
@@ -166,29 +163,19 @@ mod tests {
     fn test_library_progress_management() {
         let mut library = Library::new();
         let novel_path = PathBuf::from("/tmp/test_novel.txt");
-        let progress = ReadingProgress {
-            line: 42,
-            scroll_offset: 10,
-        };
+        let progress = ReadingProgress { scroll_offset: 10 };
 
-        // Test updating progress for a new novel
         library.update_novel_progress(&novel_path, progress);
         assert_eq!(library.novels.len(), 1);
         assert_eq!(library.get_novel_progress(&novel_path), progress);
 
-        // Test updating progress for existing novel
-        let new_progress = ReadingProgress {
-            line: 50,
-            scroll_offset: 15,
-        };
+        let new_progress = ReadingProgress { scroll_offset: 15 };
         library.update_novel_progress(&novel_path, new_progress);
         assert_eq!(library.novels.len(), 1);
         assert_eq!(library.get_novel_progress(&novel_path), new_progress);
 
-        // Test getting progress for non-existent novel
         let non_existent = PathBuf::from("/tmp/non_existent.txt");
         let default_progress = library.get_novel_progress(&non_existent);
-        assert_eq!(default_progress.line, 0);
         assert_eq!(default_progress.scroll_offset, 0);
     }
 
@@ -199,14 +186,10 @@ mod tests {
 
         let mut library = Library::new();
         let novel_path = PathBuf::from("/tmp/test_novel.txt");
-        let progress = ReadingProgress {
-            line: 42,
-            scroll_offset: 10,
-        };
+        let progress = ReadingProgress { scroll_offset: 10 };
 
         library.update_novel_progress(&novel_path, progress);
 
-        // 写入文件
         let serialized = serde_json::to_string_pretty(&library)?;
         fs::write(&progress_file, &serialized)?;
 
@@ -226,25 +209,14 @@ mod tests {
     #[test]
     fn test_reading_progress_default() {
         let progress = ReadingProgress::default();
-        assert_eq!(progress.line, 0);
         assert_eq!(progress.scroll_offset, 0);
     }
 
-    /// 测试ReadingProgress的PartialEq实现
     #[test]
     fn test_reading_progress_equality() {
-        let progress1 = ReadingProgress {
-            line: 10,
-            scroll_offset: 5,
-        };
-        let progress2 = ReadingProgress {
-            line: 10,
-            scroll_offset: 5,
-        };
-        let progress3 = ReadingProgress {
-            line: 10,
-            scroll_offset: 6,
-        };
+        let progress1 = ReadingProgress { scroll_offset: 5 };
+        let progress2 = ReadingProgress { scroll_offset: 5 };
+        let progress3 = ReadingProgress { scroll_offset: 6 };
 
         assert_eq!(progress1, progress2);
         assert_ne!(progress1, progress3);
@@ -358,10 +330,7 @@ mod tests {
 
         let mut library = Library::new();
         let novel_path = PathBuf::from("/tmp/test_novel.txt");
-        let progress = ReadingProgress {
-            line: 42,
-            scroll_offset: 10,
-        };
+        let progress = ReadingProgress { scroll_offset: 10 };
 
         library.update_novel_progress(&novel_path, progress);
 
@@ -373,7 +342,6 @@ mod tests {
         assert!(progress_file.exists());
         let saved_content = fs::read_to_string(&progress_file)?;
         assert!(saved_content.contains("test_novel.txt"));
-        assert!(saved_content.contains("42"));
         assert!(saved_content.contains("10"));
 
         Ok(())
@@ -388,18 +356,9 @@ mod tests {
         let novel2_path = PathBuf::from("/tmp/novel2.txt");
         let novel3_path = PathBuf::from("/tmp/novel3.txt");
 
-        let progress1 = ReadingProgress {
-            line: 10,
-            scroll_offset: 5,
-        };
-        let progress2 = ReadingProgress {
-            line: 20,
-            scroll_offset: 15,
-        };
-        let progress3 = ReadingProgress {
-            line: 30,
-            scroll_offset: 25,
-        };
+        let progress1 = ReadingProgress { scroll_offset: 5 };
+        let progress2 = ReadingProgress { scroll_offset: 15 };
+        let progress3 = ReadingProgress { scroll_offset: 25 };
 
         // 添加多个小说
         library.update_novel_progress(&novel1_path, progress1);
@@ -418,14 +377,8 @@ mod tests {
         let mut library = Library::new();
         let novel_path = PathBuf::from("/tmp/same_novel.txt");
 
-        let progress1 = ReadingProgress {
-            line: 10,
-            scroll_offset: 5,
-        };
-        let progress2 = ReadingProgress {
-            line: 20,
-            scroll_offset: 15,
-        };
+        let progress1 = ReadingProgress { scroll_offset: 5 };
+        let progress2 = ReadingProgress { scroll_offset: 15 };
 
         // 第一次添加
         library.update_novel_progress(&novel_path, progress1);
@@ -454,7 +407,6 @@ mod tests {
 
         for (i, path) in special_paths.iter().enumerate() {
             let progress = ReadingProgress {
-                line: i * 10,
                 scroll_offset: i * 5,
             };
             library.update_novel_progress(path, progress);
@@ -481,10 +433,7 @@ mod tests {
 
         // 添加边界值的进度
         let novel_path = PathBuf::from("/tmp/edge_case_novel.txt");
-        let progress = ReadingProgress {
-            line: usize::MAX,
-            scroll_offset: 0,
-        };
+        let progress = ReadingProgress { scroll_offset: 0 };
         library.update_novel_progress(&novel_path, progress);
 
         // 序列化
@@ -496,10 +445,6 @@ mod tests {
         let deserialized: Library = serde_json::from_str(&content)?;
 
         assert_eq!(deserialized.novels.len(), 1);
-        assert_eq!(
-            deserialized.get_novel_progress(&novel_path).line,
-            usize::MAX
-        );
         assert_eq!(
             deserialized.get_novel_progress(&novel_path).scroll_offset,
             0
