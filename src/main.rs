@@ -163,7 +163,7 @@ impl App {
         let area = f.area();
 
         // 创建书架标题
-        let title = Paragraph::new("小说阅读器 - 书架")
+        let title = Paragraph::new("书架")
             .style(Style::default().fg(Color::Cyan))
             .alignment(Alignment::Center);
 
@@ -229,26 +229,12 @@ impl App {
         if let Some(novel) = &self.current_novel {
             let area = f.area();
 
-            // 创建标题
-            let title = Paragraph::new(format!("阅读中: {}", novel.title))
-                .style(Style::default().fg(Color::Cyan))
-                .alignment(Alignment::Center);
-
-            let title_area = Rect {
-                x: area.x,
-                y: area.y,
-                width: area.width,
-                height: 2,
-            };
-
-            f.render_widget(title, title_area);
-
             // 计算可见内容区域
             let content_area = Rect {
                 x: area.x + 1,
-                y: area.y + 2,
+                y: area.y,
                 width: area.width - 2,
-                height: area.height - 5,
+                height: area.height - 1,
             };
 
             // 分割内容为行
@@ -268,7 +254,7 @@ impl App {
 
             f.render_widget(content, content_area);
 
-            // 创建帮助信息
+            // 创建帮助信息（贴近底部）
             let progress_text = format!("进度: {}/{} 行", start_line + 1, lines.len());
             let help_text = format!(
                 "{} | ↑/k: 上滚  ↓/j: 下滚  ←/h: 上页  →/l: 下页  /: 搜索  p: 返回书架  q: 退出",
@@ -280,9 +266,9 @@ impl App {
 
             let help_area = Rect {
                 x: area.x,
-                y: area.height - 3,
+                y: area.height - 1,
                 width: area.width,
-                height: 3,
+                height: 1,
             };
 
             f.render_widget(help, help_area);
@@ -352,11 +338,10 @@ impl App {
             let lines: Vec<&str> = novel.content.lines().collect();
             let max_scroll = lines.len().saturating_sub(1);
 
-            // 精确计算内容区域高度（标题2行 + 帮助信息3行 + 边框）
             let content_height = (self.terminal_size.height as usize)
-                .saturating_sub(2 + 3) // 标题2行 + 帮助信息3行
+                .saturating_sub(1) // 帮助信息1行
                 .saturating_sub(2) // 上下边框各占1行
-                .saturating_sub(1); // 减去1行，方便阅读
+                .saturating_sub(1);
             let page_size = content_height.max(1);
 
             match key {
