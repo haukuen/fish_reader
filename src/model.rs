@@ -11,6 +11,8 @@ pub struct Novel {
     pub content: String,
     /// 当前阅读进度
     pub progress: ReadingProgress,
+    /// 章节目录
+    pub chapters: Vec<Chapter>,
 }
 
 impl Novel {
@@ -30,13 +32,111 @@ impl Novel {
             path: path.clone(),
             content: String::new(),
             progress: ReadingProgress::default(),
+            chapters: Vec::new(),
         }
     }
 
     pub fn load_content(&mut self) -> std::io::Result<()> {
         self.content = std::fs::read_to_string(&self.path)?;
+        self.parse_chapters();
         Ok(())
     }
+
+    /// 解析章节目录
+    /// # 功能
+    /// 从小说内容中自动识别章节标题，支持多种常见格式
+    pub fn parse_chapters(&mut self) {
+        self.chapters.clear();
+
+        let lines: Vec<&str> = self.content.lines().collect();
+
+        for (line_num, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+
+            // 跳过空行
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // 检查是否为章节标题
+            if self.is_chapter_title(trimmed) {
+                self.chapters.push(Chapter {
+                    title: trimmed.to_string(),
+                    start_line: line_num,
+                });
+            }
+        }
+    }
+
+    /// 判断一行文本是否为章节标题
+    /// # 参数
+    /// - `line`: 待检查的文本行
+    /// # 返回
+    /// 如果是章节标题返回true，否则返回false
+    fn is_chapter_title(&self, line: &str) -> bool {
+        let line = line.trim();
+
+        // 检查常见的章节标题模式
+        let chapter_keywords = ['章', '回', '节', '卷', '部', '篇'];
+        if line.starts_with("第") && chapter_keywords.iter().any(|&kw| line.contains(kw)) {
+            return true;
+        }
+
+        // 检查英文章节
+        if line.to_lowercase().starts_with("chapter") {
+            return true;
+        }
+
+        // 检查特殊章节
+        let special_chapters = [
+            "序章", "序言", "楔子", "尾声", "后记", "番外", "终章", "结语", "引子", "开篇",
+        ];
+        for special in &special_chapters {
+            if line.starts_with(special) {
+                return true;
+            }
+        }
+
+        // 检查纯数字章节 (如 "1." "2、")
+        if line.len() <= 10 {
+            let chars: Vec<char> = line.chars().collect();
+            if chars.len() >= 2 {
+                let first_part = &chars[0..chars.len() - 1];
+                let last_char = chars[chars.len() - 1];
+                if first_part.iter().all(|c| c.is_ascii_digit())
+                    && (last_char == '.' || last_char == '、')
+                {
+                    return true;
+                }
+            }
+        }
+
+        // 检查中文数字章节
+        let chinese_numbers = [
+            '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '百', '千', '万',
+        ];
+        if line.len() <= 10
+            && line
+                .chars()
+                .next()
+                .map_or(false, |c| chinese_numbers.contains(&c))
+        {
+            if line.ends_with('、') || line.ends_with('.') {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
+/// 章节信息结构
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Chapter {
+    /// 章节标题
+    pub title: String,
+    /// 章节在文本中的起始行号
+    pub start_line: usize,
 }
 
 /// 阅读进度跟踪结构
