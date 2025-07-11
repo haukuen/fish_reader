@@ -400,7 +400,8 @@ impl App {
                     // 进入章节目录模式
                     self.previous_state = AppState::Reading;
                     self.state = AppState::ChapterList;
-                    self.selected_chapter_index = None;
+                    // 根据当前阅读位置自动选择最接近的章节
+                    self.selected_chapter_index = self.find_current_chapter_index();
                 }
                 _ => {}
             }
@@ -686,6 +687,33 @@ impl App {
                 self.search_results.clear();
                 self.selected_search_index = None;
             }
+        }
+    }
+
+    /// 根据当前阅读位置找到最接近的章节索引
+    /// # 返回
+    /// 返回最接近当前阅读位置的章节索引，如果没有章节则返回None
+    fn find_current_chapter_index(&self) -> Option<usize> {
+        if let Some(novel) = &self.current_novel {
+            if novel.chapters.is_empty() {
+                return None;
+            }
+
+            let current_line = novel.progress.scroll_offset;
+            let mut best_index = 0;
+
+            // 找到当前阅读位置之前的最后一个章节
+            for (index, chapter) in novel.chapters.iter().enumerate() {
+                if chapter.start_line <= current_line {
+                    best_index = index;
+                } else {
+                    break;
+                }
+            }
+
+            Some(best_index)
+        } else {
+            None
         }
     }
 
