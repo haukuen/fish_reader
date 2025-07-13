@@ -632,6 +632,18 @@ impl App {
                 let mut state = ListState::default();
                 state.select(self.selected_chapter_index);
 
+                // 计算滚动偏移，让选中的章节显示在中间位置
+                if let Some(selected) = self.selected_chapter_index {
+                    let visible_height = list_area.height.saturating_sub(2) as usize; // 减去边框
+                    let half_height = visible_height / 2;
+
+                    if selected >= half_height {
+                        let max_offset = novel.chapters.len().saturating_sub(visible_height);
+                        let offset = (selected.saturating_sub(half_height)).min(max_offset);
+                        state = state.with_offset(offset);
+                    }
+                }
+
                 f.render_stateful_widget(chapters_list, list_area, &mut state);
             }
         }
