@@ -1,6 +1,7 @@
 mod model;
 
 use anyhow::{Context, Result};
+use clap::Command;
 use crossterm::ExecutableCommand;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{
@@ -959,15 +960,12 @@ impl App {
                     if index < self.orphaned_novels.len() {
                         let orphaned_novel = &self.orphaned_novels[index];
 
-                        // 从library中移除该记录
                         self.library
                             .novels
                             .retain(|n| n.path != orphaned_novel.path);
 
-                        // 保存更新后的library
                         let _ = self.library.save();
 
-                        // 重新检测孤立记录
                         self.detect_orphaned_novels();
 
                         // 调整选中索引
@@ -984,7 +982,12 @@ impl App {
 }
 
 fn main() -> Result<()> {
-    // 创建并运行应用
+    let _matches = Command::new("fish_reader")
+        .version(env!("CARGO_PKG_VERSION"))
+        .author("haukuen")
+        .about("A terminal-based novel reader with bookshelf management")
+        .get_matches();
+
     let mut app = App::new().context("创建应用失败")?;
     app.run().context("运行应用失败")?;
 
