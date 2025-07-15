@@ -3,7 +3,8 @@ mod model;
 use anyhow::{Context, Result};
 use clap::Command;
 use crossterm::ExecutableCommand;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, MouseEvent, MouseEventKind};
+use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
@@ -124,7 +125,9 @@ impl App {
     fn run(&mut self) -> Result<()> {
         // 设置终端
         enable_raw_mode()?;
-        stdout().execute(EnterAlternateScreen)?;
+        stdout()
+            .execute(EnterAlternateScreen)?
+            .execute(EnableMouseCapture)?;
         let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
 
         // 主循环
@@ -142,10 +145,16 @@ impl App {
                 .unwrap_or_else(|| Duration::from_secs(0));
 
             if crossterm::event::poll(timeout)? {
-                if let Event::Key(key) = event::read()? {
-                    if key.kind == KeyEventKind::Press {
-                        self.handle_key(key.code);
+                match event::read()? {
+                    Event::Key(key) => {
+                        if key.kind == KeyEventKind::Press {
+                            self.handle_key(key.code);
+                        }
                     }
+                    Event::Mouse(mouse) => {
+                        self.handle_mouse(mouse);
+                    }
+                    _ => {}
                 }
             }
 
@@ -163,7 +172,9 @@ impl App {
 
         // 恢复终端
         disable_raw_mode()?;
-        stdout().execute(LeaveAlternateScreen)?;
+        stdout()
+            .execute(DisableMouseCapture)?
+            .execute(LeaveAlternateScreen)?;
 
         Ok(())
     }
@@ -304,6 +315,27 @@ impl App {
         }
     }
 
+    /// 处理鼠标事件
+    fn handle_mouse(&mut self, mouse: MouseEvent) {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => match self.state {
+                AppState::Reading => self.handle_reader_key(KeyCode::Up),
+                AppState::Bookshelf => self.handle_bookshelf_key(KeyCode::Up),
+                AppState::ChapterList => self.handle_chapter_list_key(KeyCode::Up),
+                AppState::Settings => self.handle_settings_key(KeyCode::Up),
+                AppState::Searching => self.handle_search_key(KeyCode::Up),
+            },
+            MouseEventKind::ScrollDown => match self.state {
+                AppState::Reading => self.handle_reader_key(KeyCode::Down),
+                AppState::Bookshelf => self.handle_bookshelf_key(KeyCode::Down),
+                AppState::ChapterList => self.handle_chapter_list_key(KeyCode::Down),
+                AppState::Settings => self.handle_settings_key(KeyCode::Down),
+                AppState::Searching => self.handle_search_key(KeyCode::Down),
+            },
+            _ => {}
+        }
+    }
+
     fn handle_bookshelf_key(&mut self, key: KeyCode) {
         match key {
             KeyCode::Char('q') | KeyCode::Char('Q') => {
@@ -398,12 +430,11 @@ impl App {
                     }
                 }
                 KeyCode::Left | KeyCode::Char('h') => {
-                    // 向上翻页（使用修正后的页面尺寸）
+                    // 向上翻页
                     novel.progress.scroll_offset =
                         novel.progress.scroll_offset.saturating_sub(page_size);
                 }
                 KeyCode::Right | KeyCode::Char('l') => {
-                    // 精确边界控制：确保不超过最大可滚动行数
                     let max_offset = lines.len().saturating_sub(content_height);
                     novel.progress.scroll_offset =
                         (novel.progress.scroll_offset + page_size).min(max_offset);
@@ -566,13 +597,11 @@ impl App {
             KeyCode::Backspace => {
                 // 删除搜索输入的最后一个字符
                 self.search_input.pop();
-                // 自动执行搜索
                 self.perform_search();
             }
             KeyCode::Char(c) => {
                 // 添加字符到搜索输入
                 self.search_input.push(c);
-                // 自动执行搜索（避免中文输入法拼音状态）
                 self.perform_search();
             }
             _ => {}
