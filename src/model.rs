@@ -563,8 +563,8 @@ mod tests {
         fs::write(&progress_file, "{ invalid json content }")?;
 
         // 尝试从损坏的文件加载应该返回新的Library
-        // 注意：这里我们不能直接测试Library::load()，因为它使用固定路径
-        // 但我们可以测试JSON反序列化的错误处理
+        // 注意：这里不能直接测试Library::load()，因为它使用固定路径
+        // 但可以测试JSON反序列化的错误处理
         let content = fs::read_to_string(&progress_file)?;
         let result: Result<Library, _> = serde_json::from_str(&content);
 

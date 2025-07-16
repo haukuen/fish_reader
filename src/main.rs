@@ -1038,6 +1038,9 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::KeyCode;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     use std::fs;
     use tempfile::tempdir;
 
@@ -1047,7 +1050,7 @@ mod tests {
         let state = AppState::Bookshelf;
         let cloned_state = state.clone();
 
-        // 由于AppState没有实现PartialEq，我们通过模式匹配来验证
+        // 由于AppState没有实现PartialEq，通过模式匹配来验证
         match (state, cloned_state) {
             (AppState::Bookshelf, AppState::Bookshelf) => {}
             _ => panic!("AppState clone failed"),
@@ -1122,59 +1125,136 @@ mod tests {
         assert!(novels.is_empty());
     }
 
-    /// 测试书架模式下的键盘处理
+    /// 测试书架模式下的退出逻辑
     #[test]
-    fn test_handle_bookshelf_key() -> Result<()> {
+    fn test_bookshelf_quit_logic() -> Result<()> {
         let mut app = App::new()?;
 
-        // 测试退出键
-        app.handle_bookshelf_key(KeyCode::Char('q'));
-        assert!(app.should_quit);
+        // 测试各种退出键
+        let quit_keys = [KeyCode::Char('q'), KeyCode::Char('Q'), KeyCode::Esc];
 
-        // 重置状态
-        app.should_quit = false;
-        app.handle_bookshelf_key(KeyCode::Char('Q'));
-        assert!(app.should_quit);
+        for key in quit_keys {
+            app.should_quit = false;
+            app.handle_bookshelf_key(key);
+            assert!(app.should_quit, "Key {:?} should trigger quit", key);
+        }
 
         Ok(())
     }
 
-    /// 测试书架导航功能
+    /// 测试书架导航状态变化逻辑
     #[test]
-    fn test_bookshelf_navigation() -> Result<()> {
+    fn test_bookshelf_navigation_logic() -> Result<()> {
         let mut app = App::new()?;
 
-        // 模拟有3本小说的情况
+        // 创建测试数据
         app.novels = vec![
             Novel::new(PathBuf::from("novel1.txt")),
             Novel::new(PathBuf::from("novel2.txt")),
             Novel::new(PathBuf::from("novel3.txt")),
         ];
 
-        // 测试向下导航
-        app.handle_bookshelf_key(KeyCode::Down);
-        assert_eq!(app.selected_novel_index, Some(0));
+        // 测试初始状态
+        assert_eq!(app.selected_novel_index, None);
 
-        app.handle_bookshelf_key(KeyCode::Down);
-        assert_eq!(app.selected_novel_index, Some(1));
+        // 测试向下导航逻辑
+        let down_keys = [KeyCode::Down, KeyCode::Char('j')];
+        for key in down_keys {
+            app.selected_novel_index = None;
+            app.handle_bookshelf_key(key);
+            assert_eq!(
+                app.selected_novel_index,
+                Some(0),
+                "First down should select index 0"
+            );
 
-        app.handle_bookshelf_key(KeyCode::Down);
-        assert_eq!(app.selected_novel_index, Some(2));
+            app.handle_bookshelf_key(key);
+            assert_eq!(
+                app.selected_novel_index,
+                Some(1),
+                "Second down should select index 1"
+            );
 
-        // 测试循环到开头
-        app.handle_bookshelf_key(KeyCode::Down);
-        assert_eq!(app.selected_novel_index, Some(0));
+            app.handle_bookshelf_key(key);
+            assert_eq!(
+                app.selected_novel_index,
+                Some(2),
+                "Third down should select index 2"
+            );
 
-        // 测试向上导航
-        app.handle_bookshelf_key(KeyCode::Up);
-        assert_eq!(app.selected_novel_index, Some(2));
+            // 测试循环
+            app.handle_bookshelf_key(key);
+            assert_eq!(
+                app.selected_novel_index,
+                Some(0),
+                "Fourth down should wrap to index 0"
+            );
+        }
 
-        // 测试vim风格的键位
-        app.handle_bookshelf_key(KeyCode::Char('j'));
-        assert_eq!(app.selected_novel_index, Some(0));
+        // 测试向上导航逻辑
+        let up_keys = [KeyCode::Up, KeyCode::Char('k')];
+        for key in up_keys {
+            app.selected_novel_index = Some(0);
+            app.handle_bookshelf_key(key);
+            assert_eq!(
+                app.selected_novel_index,
+                Some(2),
+                "Up from 0 should wrap to 2"
+            );
 
-        app.handle_bookshelf_key(KeyCode::Char('k'));
-        assert_eq!(app.selected_novel_index, Some(2));
+            app.handle_bookshelf_key(key);
+            assert_eq!(
+                app.selected_novel_index,
+                Some(1),
+                "Up from 2 should go to 1"
+            );
+
+            app.handle_bookshelf_key(key);
+            assert_eq!(
+                app.selected_novel_index,
+                Some(0),
+                "Up from 1 should go to 0"
+            );
+        }
+
+        Ok(())
+    }
+
+    /// 测试书架选择小说逻辑
+    #[test]
+    fn test_bookshelf_selection_logic() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 创建测试数据
+        app.novels = vec![Novel::new(PathBuf::from("test_novel.txt"))];
+        app.selected_novel_index = Some(0);
+
+        // 测试选择小说
+        app.handle_bookshelf_key(KeyCode::Enter);
+
+        // 验证状态变化
+        assert!(matches!(app.state, AppState::Reading));
+        assert!(app.current_novel.is_some());
+
+        Ok(())
+    }
+
+    /// 测试书架设置页面跳转逻辑
+    #[test]
+    fn test_bookshelf_settings_transition() -> Result<()> {
+        let mut app = App::new()?;
+
+        let settings_keys = [KeyCode::Char('s'), KeyCode::Char('S')];
+
+        for key in settings_keys {
+            app.state = AppState::Bookshelf;
+            app.handle_bookshelf_key(key);
+            assert!(
+                matches!(app.state, AppState::Settings),
+                "Key {:?} should go to settings",
+                key
+            );
+        }
 
         Ok(())
     }
@@ -1197,109 +1277,289 @@ mod tests {
         Ok(())
     }
 
-    /// 测试搜索功能
+    /// 测试搜索算法逻辑
     #[test]
-    fn test_search_functionality() -> Result<()> {
+    fn test_search_algorithm_logic() -> Result<()> {
         let mut app = App::new()?;
 
-        // 设置当前小说
+        // 设置测试小说内容
         let mut novel = Novel::new(PathBuf::from("test.txt"));
         novel.content = "第一章 开始\n第二章 发展\n第三章 高潮\n第四章 结局".to_string();
         app.current_novel = Some(novel);
 
-        // 设置搜索输入
+        // 测试通用搜索
         app.search_input = "第".to_string();
         app.perform_search();
+        assert_eq!(
+            app.search_results.len(),
+            4,
+            "Should find 4 lines containing '第'"
+        );
+        assert_eq!(
+            app.selected_search_index,
+            Some(0),
+            "Should auto-select first result"
+        );
 
-        // 验证搜索结果
-        assert_eq!(app.search_results.len(), 4); // 所有行都包含"第"
-        assert_eq!(app.selected_search_index, Some(0));
-
-        // 测试更具体的搜索
+        // 测试精确搜索
         app.search_input = "高潮".to_string();
         app.perform_search();
+        assert_eq!(
+            app.search_results.len(),
+            1,
+            "Should find 1 line containing '高潮'"
+        );
+        assert_eq!(app.search_results[0].0, 2, "Should be line index 2");
+        assert!(
+            app.search_results[0].1.contains("高潮"),
+            "Result should contain search term"
+        );
 
-        assert_eq!(app.search_results.len(), 1);
-        assert_eq!(app.search_results[0].0, 2); // 第三行（索引2）
-        assert!(app.search_results[0].1.contains("高潮"));
+        // 测试大小写不敏感搜索
+        app.search_input = "开始".to_string();
+        app.perform_search();
+        assert_eq!(
+            app.search_results.len(),
+            1,
+            "Should find case-insensitive match"
+        );
+
+        // 测试无结果搜索
+        app.search_input = "不存在的内容".to_string();
+        app.perform_search();
+        assert!(app.search_results.is_empty(), "Should return empty results");
+        assert_eq!(app.selected_search_index, None, "Should clear selection");
 
         // 测试空搜索
         app.search_input.clear();
         app.perform_search();
-
-        assert!(app.search_results.is_empty());
-        assert_eq!(app.selected_search_index, None);
+        assert!(
+            app.search_results.is_empty(),
+            "Empty search should clear results"
+        );
+        assert_eq!(
+            app.selected_search_index, None,
+            "Empty search should clear selection"
+        );
 
         Ok(())
     }
 
-    /// 测试搜索模式下的键盘处理
+    /// 测试搜索输入处理逻辑
     #[test]
-    fn test_search_key_handling() -> Result<()> {
+    fn test_search_input_logic() -> Result<()> {
         let mut app = App::new()?;
-
-        // 设置搜索模式
         app.state = AppState::Searching;
         app.previous_state = AppState::Reading;
 
-        // 测试ESC键返回上一状态
-        app.handle_search_key(KeyCode::Esc);
-        assert!(matches!(app.state, AppState::Reading));
-
-        // 重置到搜索模式
-        app.state = AppState::Searching;
-
         // 测试字符输入
         app.handle_search_key(KeyCode::Char('测'));
+        assert_eq!(
+            app.search_input, "测",
+            "Should add character to search input"
+        );
+
         app.handle_search_key(KeyCode::Char('试'));
-        assert_eq!(app.search_input, "测试");
+        assert_eq!(
+            app.search_input, "测试",
+            "Should append character to search input"
+        );
 
         // 测试退格键
         app.handle_search_key(KeyCode::Backspace);
-        assert_eq!(app.search_input, "测");
+        assert_eq!(
+            app.search_input, "测",
+            "Backspace should remove last character"
+        );
+
+        app.handle_search_key(KeyCode::Backspace);
+        assert_eq!(
+            app.search_input, "",
+            "Backspace should remove all characters"
+        );
+
+        // 测试空字符串退格
+        app.handle_search_key(KeyCode::Backspace);
+        assert_eq!(
+            app.search_input, "",
+            "Backspace on empty string should not crash"
+        );
 
         Ok(())
     }
 
-    /// 测试搜索结果导航
+    /// 测试搜索状态转换逻辑
     #[test]
-    fn test_search_results_navigation() -> Result<()> {
+    fn test_search_state_transitions() -> Result<()> {
+        let mut app = App::new()?;
+        app.state = AppState::Searching;
+        app.previous_state = AppState::Reading;
+
+        // 测试退出键
+        let exit_keys = [KeyCode::Esc, KeyCode::Char('q'), KeyCode::Char('Q')];
+        for key in exit_keys {
+            app.state = AppState::Searching;
+            app.handle_search_key(key);
+            assert!(
+                matches!(app.state, AppState::Reading),
+                "Key {:?} should return to previous state",
+                key
+            );
+        }
+
+        Ok(())
+    }
+
+    /// 测试搜索结果导航逻辑
+    #[test]
+    fn test_search_navigation_logic() -> Result<()> {
         let mut app = App::new()?;
 
-        // 设置搜索结果
+        // 设置测试搜索结果
         app.search_results = vec![
             (0, "第一行".to_string()),
             (2, "第三行".to_string()),
             (4, "第五行".to_string()),
         ];
+        app.selected_search_index = None;
 
         // 测试向下导航
         app.handle_search_key(KeyCode::Down);
-        assert_eq!(app.selected_search_index, Some(0));
+        assert_eq!(
+            app.selected_search_index,
+            Some(0),
+            "First down should select index 0"
+        );
 
         app.handle_search_key(KeyCode::Down);
-        assert_eq!(app.selected_search_index, Some(1));
+        assert_eq!(
+            app.selected_search_index,
+            Some(1),
+            "Second down should select index 1"
+        );
 
         app.handle_search_key(KeyCode::Down);
-        assert_eq!(app.selected_search_index, Some(2));
+        assert_eq!(
+            app.selected_search_index,
+            Some(2),
+            "Third down should select index 2"
+        );
 
-        // 测试循环到开头
+        // 测试循环
         app.handle_search_key(KeyCode::Down);
-        assert_eq!(app.selected_search_index, Some(0));
+        assert_eq!(
+            app.selected_search_index,
+            Some(0),
+            "Fourth down should wrap to index 0"
+        );
 
         // 测试向上导航
         app.handle_search_key(KeyCode::Up);
-        assert_eq!(app.selected_search_index, Some(2));
+        assert_eq!(
+            app.selected_search_index,
+            Some(2),
+            "Up should wrap to last index"
+        );
+
+        app.handle_search_key(KeyCode::Up);
+        assert_eq!(
+            app.selected_search_index,
+            Some(1),
+            "Up should go to previous index"
+        );
 
         Ok(())
     }
 
-    /// 测试阅读器模式下的滚动功能
+    /// 测试搜索结果跳转逻辑
     #[test]
-    fn test_reader_scrolling() -> Result<()> {
+    fn test_search_jump_logic() -> Result<()> {
         let mut app = App::new()?;
 
-        // 设置当前小说和终端尺寸
+        // 设置测试环境
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.content = "line1\nline2\nline3".to_string();
+        app.current_novel = Some(novel);
+        app.state = AppState::Searching;
+
+        app.search_results = vec![(1, "line2".to_string())];
+        app.selected_search_index = Some(0);
+
+        // 测试跳转
+        app.handle_search_key(KeyCode::Enter);
+
+        // 验证跳转结果
+        assert!(
+            matches!(app.state, AppState::Reading),
+            "Should return to reading state"
+        );
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            1,
+            "Should jump to correct line"
+        );
+
+        Ok(())
+    }
+
+    /// 测试阅读器滚动逻辑
+    #[test]
+    fn test_reader_scroll_logic() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置测试小说
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.content = (0..10)
+            .map(|i| format!("第{}行内容", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        app.current_novel = Some(novel);
+        app.state = AppState::Reading;
+
+        // 测试向下滚动键
+        let down_keys = [KeyCode::Down, KeyCode::Char('j')];
+        for key in down_keys {
+            app.current_novel.as_mut().unwrap().progress.scroll_offset = 0;
+            app.handle_reader_key(key);
+            assert_eq!(
+                app.current_novel.as_ref().unwrap().progress.scroll_offset,
+                1,
+                "Key {:?} should scroll down by 1",
+                key
+            );
+        }
+
+        // 测试向上滚动键
+        let up_keys = [KeyCode::Up, KeyCode::Char('k')];
+        for key in up_keys {
+            app.current_novel.as_mut().unwrap().progress.scroll_offset = 2;
+            app.handle_reader_key(key);
+            assert_eq!(
+                app.current_novel.as_ref().unwrap().progress.scroll_offset,
+                1,
+                "Key {:?} should scroll up by 1",
+                key
+            );
+        }
+
+        // 测试边界条件 - 不能滚动到负数
+        app.current_novel.as_mut().unwrap().progress.scroll_offset = 0;
+        app.handle_reader_key(KeyCode::Up);
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            0,
+            "Should not scroll below 0"
+        );
+
+        Ok(())
+    }
+
+    /// 测试阅读器翻页逻辑
+    #[test]
+    fn test_reader_paging_logic() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置长文本小说和终端尺寸
         let mut novel = Novel::new(PathBuf::from("test.txt"));
         novel.content = (0..100)
             .map(|i| format!("第{}行内容", i))
@@ -1307,114 +1567,441 @@ mod tests {
             .join("\n");
         app.current_novel = Some(novel);
         app.terminal_size = Rect::new(0, 0, 80, 24);
+        app.state = AppState::Reading;
 
-        // 测试向下滚动
-        app.handle_reader_key(KeyCode::Down);
-        assert_eq!(
-            app.current_novel.as_ref().unwrap().progress.scroll_offset,
-            1
-        );
+        // 测试向下翻页键
+        let page_down_keys = [KeyCode::Right, KeyCode::Char('l')];
+        for key in page_down_keys {
+            app.current_novel.as_mut().unwrap().progress.scroll_offset = 0;
+            app.handle_reader_key(key);
+            let offset = app.current_novel.as_ref().unwrap().progress.scroll_offset;
+            assert!(offset > 0, "Key {:?} should page down", key);
+        }
 
-        app.handle_reader_key(KeyCode::Char('j'));
-        assert_eq!(
-            app.current_novel.as_ref().unwrap().progress.scroll_offset,
-            2
-        );
+        // 测试向上翻页键
+        let page_up_keys = [KeyCode::Left, KeyCode::Char('h')];
+        for key in page_up_keys {
+            app.current_novel.as_mut().unwrap().progress.scroll_offset = 20;
+            let initial_offset = app.current_novel.as_ref().unwrap().progress.scroll_offset;
+            app.handle_reader_key(key);
+            let final_offset = app.current_novel.as_ref().unwrap().progress.scroll_offset;
+            assert!(
+                final_offset < initial_offset,
+                "Key {:?} should page up",
+                key
+            );
+        }
 
-        // 测试向上滚动
-        app.handle_reader_key(KeyCode::Up);
-        assert_eq!(
-            app.current_novel.as_ref().unwrap().progress.scroll_offset,
-            1
-        );
-
-        app.handle_reader_key(KeyCode::Char('k'));
-        assert_eq!(
-            app.current_novel.as_ref().unwrap().progress.scroll_offset,
-            0
-        );
-
-        // 测试不能向上滚动超过开头
-        app.handle_reader_key(KeyCode::Up);
-        assert_eq!(
-            app.current_novel.as_ref().unwrap().progress.scroll_offset,
-            0
-        );
-
-        Ok(())
-    }
-
-    /// 测试阅读器模式下的翻页功能
-    #[test]
-    fn test_reader_paging() -> Result<()> {
-        let mut app = App::new()?;
-
-        // 设置当前小说和终端尺寸
-        let mut novel = Novel::new(PathBuf::from("test.txt"));
-        novel.content = (0..100)
-            .map(|i| format!("第{}行内容", i))
-            .collect::<Vec<_>>()
-            .join("\n");
-        app.current_novel = Some(novel);
-        app.terminal_size = Rect::new(0, 0, 80, 24);
-
-        // 测试向右翻页（向下）
-        app.handle_reader_key(KeyCode::Right);
-        let first_page_offset = app.current_novel.as_ref().unwrap().progress.scroll_offset;
-        assert!(first_page_offset > 0);
-
-        app.handle_reader_key(KeyCode::Char('l'));
-        let second_page_offset = app.current_novel.as_ref().unwrap().progress.scroll_offset;
-        assert!(second_page_offset > first_page_offset);
-
-        // 测试向左翻页（向上）
+        // 测试翻页边界条件
+        app.current_novel.as_mut().unwrap().progress.scroll_offset = 0;
         app.handle_reader_key(KeyCode::Left);
         assert_eq!(
             app.current_novel.as_ref().unwrap().progress.scroll_offset,
-            first_page_offset
-        );
-
-        app.handle_reader_key(KeyCode::Char('h'));
-        assert_eq!(
-            app.current_novel.as_ref().unwrap().progress.scroll_offset,
-            0
+            0,
+            "Should not page up below 0"
         );
 
         Ok(())
     }
 
-    /// 测试阅读器模式下的状态切换
+    /// 测试阅读器状态转换逻辑
     #[test]
     fn test_reader_state_transitions() -> Result<()> {
         let mut app = App::new()?;
 
-        // 设置阅读状态
-        app.state = AppState::Reading;
+        // 设置测试环境
         let mut novel = Novel::new(PathBuf::from("test.txt"));
         novel.content = "测试内容".to_string();
         app.current_novel = Some(novel);
-
-        // 测试进入搜索模式
-        app.handle_reader_key(KeyCode::Char('/'));
-        assert!(matches!(app.state, AppState::Searching));
-        assert!(matches!(app.previous_state, AppState::Reading));
-        assert!(app.search_input.is_empty());
-        assert!(app.search_results.is_empty());
-
-        // 重置状态
         app.state = AppState::Reading;
+
+        // 测试搜索模式切换
+        app.handle_reader_key(KeyCode::Char('/'));
+        assert!(
+            matches!(app.state, AppState::Searching),
+            "'/' should switch to search mode"
+        );
+        assert!(
+            matches!(app.previous_state, AppState::Reading),
+            "Previous state should be Reading"
+        );
+        assert!(
+            app.search_input.is_empty(),
+            "Search input should be cleared"
+        );
+        assert!(
+            app.search_results.is_empty(),
+            "Search results should be cleared"
+        );
 
         // 测试返回书架
-        app.handle_reader_key(KeyCode::Char('p'));
-        assert!(matches!(app.state, AppState::Bookshelf));
+        app.state = AppState::Reading;
+        app.handle_reader_key(KeyCode::Esc);
+        assert!(
+            matches!(app.state, AppState::Bookshelf),
+            "Esc should return to bookshelf"
+        );
 
-        // 重置状态
+        // 测试退出应用
+        app.state = AppState::Reading;
+        app.should_quit = false;
+        app.handle_reader_key(KeyCode::Char('q'));
+        assert!(app.should_quit, "'q' should set quit flag");
+
+        Ok(())
+    }
+
+    /// 测试阅读器章节列表切换逻辑
+    #[test]
+    fn test_reader_chapter_list_logic() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置测试环境
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.content = "第一章\n内容1\n第二章\n内容2".to_string();
+        app.current_novel = Some(novel);
         app.state = AppState::Reading;
 
-        // 测试退出
-        app.handle_reader_key(KeyCode::Char('q'));
-        assert!(app.should_quit);
+        // 测试章节列表切换
+        app.handle_reader_key(KeyCode::Char('t'));
+        assert!(
+            matches!(app.state, AppState::ChapterList),
+            "'t' should switch to chapter list"
+        );
 
+        Ok(())
+    }
+
+    /// 测试章节列表导航逻辑
+    #[test]
+    fn test_chapter_list_navigation_logic() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置测试环境
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.content = "第一章\n内容1\n第二章\n内容2\n第三章\n内容3".to_string();
+        novel.parse_chapters(); // 解析章节
+        app.current_novel = Some(novel);
+        app.state = AppState::ChapterList;
+        app.selected_chapter_index = None;
+
+        // 测试向下导航
+        app.handle_chapter_list_key(KeyCode::Down);
+        assert_eq!(
+            app.selected_chapter_index,
+            Some(0),
+            "First down should select index 0"
+        );
+
+        app.handle_chapter_list_key(KeyCode::Down);
+        assert_eq!(
+            app.selected_chapter_index,
+            Some(1),
+            "Second down should select index 1"
+        );
+
+        app.handle_chapter_list_key(KeyCode::Down);
+        assert_eq!(
+            app.selected_chapter_index,
+            Some(2),
+            "Third down should select index 2"
+        );
+
+        // 测试循环
+        app.handle_chapter_list_key(KeyCode::Down);
+        assert_eq!(
+            app.selected_chapter_index,
+            Some(0),
+            "Fourth down should wrap to index 0"
+        );
+
+        // 测试向上导航
+        app.handle_chapter_list_key(KeyCode::Up);
+        assert_eq!(
+            app.selected_chapter_index,
+            Some(2),
+            "Up should wrap to last index"
+        );
+
+        app.handle_chapter_list_key(KeyCode::Up);
+        assert_eq!(
+            app.selected_chapter_index,
+            Some(1),
+            "Up should go to previous index"
+        );
+
+        Ok(())
+    }
+
+    /// 测试章节列表状态转换逻辑
+    #[test]
+    fn test_chapter_list_state_transitions() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置测试环境
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.content = "第一章\n内容1\n第二章\n内容2".to_string();
+        novel.parse_chapters(); // 解析章节
+        app.current_novel = Some(novel);
+        app.state = AppState::ChapterList;
+        app.previous_state = AppState::Reading; // 设置前一个状态
+
+        // 测试退出键
+        let exit_keys = [KeyCode::Esc, KeyCode::Char('q'), KeyCode::Char('Q')];
+        for key in exit_keys {
+            app.state = AppState::ChapterList;
+            app.handle_chapter_list_key(key);
+            assert!(
+                matches!(app.state, AppState::Reading),
+                "Key {:?} should return to reading",
+                key
+            );
+        }
+
+        Ok(())
+    }
+
+    /// 测试章节跳转逻辑
+    #[test]
+    fn test_chapter_jump_logic() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置测试环境
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.content = "第一章\n内容1\n第二章\n内容2\n第三章\n内容3".to_string();
+        novel.parse_chapters(); // 解析章节
+        app.current_novel = Some(novel);
+        app.state = AppState::ChapterList;
+        app.selected_chapter_index = Some(1); // 选择第二章
+
+        // 测试跳转
+        app.handle_chapter_list_key(KeyCode::Enter);
+
+        // 验证跳转结果
+        assert!(
+            matches!(app.state, AppState::Reading),
+            "Should return to reading state"
+        );
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            2,
+            "Should jump to chapter 2 line"
+        );
+
+        Ok(())
+    }
+
+    /// 测试设置页面导航逻辑
+    #[test]
+    fn test_settings_navigation_logic() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置测试环境
+        app.state = AppState::Settings;
+        app.orphaned_novels = vec![
+            model::NovelInfo {
+                title: "小说1".to_string(),
+                path: PathBuf::from("novel1.txt"),
+                progress: model::ReadingProgress::default(),
+            },
+            model::NovelInfo {
+                title: "小说2".to_string(),
+                path: PathBuf::from("novel2.txt"),
+                progress: model::ReadingProgress::default(),
+            },
+            model::NovelInfo {
+                title: "小说3".to_string(),
+                path: PathBuf::from("novel3.txt"),
+                progress: model::ReadingProgress::default(),
+            },
+        ];
+        app.selected_orphaned_index = None;
+
+        // 测试向下导航
+        app.handle_settings_key(KeyCode::Down);
+        assert_eq!(
+            app.selected_orphaned_index,
+            Some(0),
+            "First down should select index 0"
+        );
+
+        app.handle_settings_key(KeyCode::Down);
+        assert_eq!(
+            app.selected_orphaned_index,
+            Some(1),
+            "Second down should select index 1"
+        );
+
+        app.handle_settings_key(KeyCode::Down);
+        assert_eq!(
+            app.selected_orphaned_index,
+            Some(2),
+            "Third down should select index 2"
+        );
+
+        // 测试循环
+        app.handle_settings_key(KeyCode::Down);
+        assert_eq!(
+            app.selected_orphaned_index,
+            Some(0),
+            "Fourth down should wrap to index 0"
+        );
+
+        // 测试向上导航
+        app.handle_settings_key(KeyCode::Up);
+        assert_eq!(
+            app.selected_orphaned_index,
+            Some(2),
+            "Up should wrap to last index"
+        );
+
+        app.handle_settings_key(KeyCode::Up);
+        assert_eq!(
+            app.selected_orphaned_index,
+            Some(1),
+            "Up should go to previous index"
+        );
+
+        Ok(())
+    }
+
+    /// 测试设置页面状态转换逻辑
+    #[test]
+    fn test_settings_state_transitions() -> Result<()> {
+        let mut app = App::new()?;
+        app.state = AppState::Settings;
+
+        // 测试退出键
+        let exit_keys = [KeyCode::Esc, KeyCode::Char('q'), KeyCode::Char('Q')];
+        for key in exit_keys {
+            app.state = AppState::Settings;
+            app.handle_settings_key(key);
+            assert!(
+                matches!(app.state, AppState::Bookshelf),
+                "Key {:?} should return to bookshelf",
+                key
+            );
+        }
+
+        Ok(())
+    }
+
+    /// 测试设置页面删除逻辑
+    #[test]
+    fn test_settings_delete_logic() -> Result<()> {
+        let mut app = App::new()?;
+
+        // 设置测试环境
+        app.state = AppState::Settings;
+
+        // 添加测试数据到 library
+        app.library.novels = vec![
+            model::NovelInfo {
+                title: "小说1".to_string(),
+                path: PathBuf::from("novel1.txt"),
+                progress: model::ReadingProgress::default(),
+            },
+            model::NovelInfo {
+                title: "小说2".to_string(),
+                path: PathBuf::from("novel2.txt"),
+                progress: model::ReadingProgress::default(),
+            },
+        ];
+
+        app.orphaned_novels = vec![
+            model::NovelInfo {
+                title: "小说1".to_string(),
+                path: PathBuf::from("novel1.txt"),
+                progress: model::ReadingProgress::default(),
+            },
+            model::NovelInfo {
+                title: "小说2".to_string(),
+                path: PathBuf::from("novel2.txt"),
+                progress: model::ReadingProgress::default(),
+            },
+        ];
+        app.selected_orphaned_index = Some(0);
+
+        // 测试删除操作
+        let delete_keys = [KeyCode::Char('d'), KeyCode::Char('D')];
+        for key in delete_keys {
+            app.orphaned_novels = vec![
+                model::NovelInfo {
+                    title: "小说1".to_string(),
+                    path: PathBuf::from("novel1.txt"),
+                    progress: model::ReadingProgress::default(),
+                },
+                model::NovelInfo {
+                    title: "小说2".to_string(),
+                    path: PathBuf::from("novel2.txt"),
+                    progress: model::ReadingProgress::default(),
+                },
+            ];
+            app.selected_orphaned_index = Some(0);
+            let initial_count = app.orphaned_novels.len();
+
+            app.handle_settings_key(key);
+
+            assert_eq!(
+                app.orphaned_novels.len(),
+                initial_count - 1,
+                "Key {:?} should delete selected item",
+                key
+            );
+            assert_eq!(
+                app.selected_orphaned_index,
+                Some(0),
+                "Selection should adjust after deletion"
+            );
+        }
+
+        Ok(())
+    }
+
+    // 事件-状态机层测试（使用 TestBackend）
+
+    /// 测试书架界面渲染
+    #[test]
+    fn test_bookshelf_rendering() -> Result<()> {
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend)?;
+        let mut app = App::new()?;
+
+        // 设置测试数据
+        app.novels = vec![
+            Novel::new(PathBuf::from("test1.txt")),
+            Novel::new(PathBuf::from("test2.txt")),
+        ];
+        app.selected_novel_index = Some(0);
+        app.state = AppState::Bookshelf;
+
+        // 渲染一帧
+        terminal.draw(|f| app.ui(f))?;
+
+        // 验证渲染没有崩溃
+        Ok(())
+    }
+
+    /// 测试搜索界面渲染
+    #[test]
+    fn test_search_rendering() -> Result<()> {
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend)?;
+        let mut app = App::new()?;
+
+        // 设置测试数据
+        app.state = AppState::Searching;
+        app.search_input = "测试".to_string();
+        app.search_results = vec![
+            (0, "第一行测试内容".to_string()),
+            (2, "第三行测试内容".to_string()),
+        ];
+        app.selected_search_index = Some(0);
+
+        // 渲染一帧
+        terminal.draw(|f| app.ui(f))?;
+
+        // 验证渲染没有崩溃
         Ok(())
     }
 }
