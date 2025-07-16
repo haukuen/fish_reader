@@ -240,7 +240,7 @@ impl App {
         f.render_stateful_widget(novels_list, list_area, &mut state);
 
         // 创建帮助信息
-        let help_text = "↑/k: 上移  ↓/j: 下移  Enter: 选择  s: 设置  q: 退出";
+        let help_text = "↑/k: 上移  ↓/j: 下移  Enter: 选择  s: 设置  Esc/q: 退出";
         let help = Paragraph::new(help_text)
             .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center);
@@ -287,7 +287,7 @@ impl App {
             // 创建帮助信息（贴近底部）
             let progress_text = format!("进度: {}/{} 行", start_line + 1, lines.len());
             let help_text = format!(
-                "{} | ↑/k: 上滚  ↓/j: 下滚  ←/h: 上页  →/l: 下页  /: 搜索  t: 章节目录  p: 返回书架  q: 退出",
+                "{} | ↑/k: 上滚  ↓/j: 下滚  ←/h: 上页  →/l: 下页  /: 搜索  t: 章节目录  Esc: 返回书架  q: 退出",
                 progress_text
             );
             let help = Paragraph::new(help_text)
@@ -338,7 +338,7 @@ impl App {
 
     fn handle_bookshelf_key(&mut self, key: KeyCode) {
         match key {
-            KeyCode::Char('q') | KeyCode::Char('Q') => {
+            KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
                 self.should_quit = true;
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -410,8 +410,8 @@ impl App {
                     let _ = self.library.save();
                     self.should_quit = true;
                 }
-                KeyCode::Char('p') | KeyCode::Char('P') => {
-                    // 保存阅读进度
+                KeyCode::Esc => {
+                    // 保存阅读进度并返回书架
                     self.library
                         .update_novel_progress(&novel.path, novel.progress);
                     let _ = self.library.save();
@@ -542,7 +542,7 @@ impl App {
         }
 
         // 创建帮助信息
-        let help_text = "输入搜索内容 | ↑/↓: 选择结果 | Enter: 跳转 | Esc: 返回";
+        let help_text = "输入搜索内容 | ↑/↓: 选择结果 | Enter: 跳转 | Esc/q: 返回";
         let help = Paragraph::new(help_text)
             .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center);
@@ -564,7 +564,7 @@ impl App {
     /// 处理搜索输入、结果选择和跳转
     fn handle_search_key(&mut self, key: KeyCode) {
         match key {
-            KeyCode::Esc => {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
                 // 返回上一个状态
                 self.state = self.previous_state.clone();
             }
@@ -710,7 +710,7 @@ impl App {
         }
 
         // 创建帮助信息
-        let help_text = "↑/↓: 选择章节 | Enter: 跳转到章节 | Esc: 返回阅读";
+        let help_text = "↑/↓: 选择章节 | Enter: 跳转到章节 | Esc/q: 返回阅读";
         let help = Paragraph::new(help_text)
             .style(Style::default().fg(Color::Gray))
             .alignment(Alignment::Center);
@@ -797,7 +797,7 @@ impl App {
     /// 处理章节选择、跳转和返回
     fn handle_chapter_list_key(&mut self, key: KeyCode) {
         match key {
-            KeyCode::Esc => {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
                 // 返回阅读模式
                 self.state = self.previous_state.clone();
             }
@@ -944,9 +944,9 @@ impl App {
 
         // 创建帮助信息
         let help_text = if self.orphaned_novels.is_empty() {
-            "Esc: 返回书架"
+            "Esc/q: 返回书架"
         } else {
-            "↑/↓: 选择记录 | D/d: 删除选中记录 | Esc: 返回书架"
+            "↑/↓: 选择记录 | D/d: 删除选中记录 | Esc/q: 返回书架"
         };
         let help = Paragraph::new(help_text)
             .style(Style::default().fg(Color::Gray))
@@ -969,7 +969,7 @@ impl App {
     /// 处理孤立记录的选择和删除操作
     fn handle_settings_key(&mut self, key: KeyCode) {
         match key {
-            KeyCode::Esc => {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
                 // 返回书架
                 self.state = AppState::Bookshelf;
             }
