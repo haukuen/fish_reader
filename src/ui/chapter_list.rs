@@ -33,7 +33,7 @@ pub fn render_chapter_list(f: &mut Frame, app: &App) {
                 x: area.x + 2,
                 y: area.y + 2,
                 width: area.width - 4,
-                height: area.height - 5,
+                height: area.height - 3,
             };
 
             f.render_widget(no_chapters, content_area);
@@ -67,7 +67,7 @@ pub fn render_chapter_list(f: &mut Frame, app: &App) {
                 x: area.x + 2,
                 y: area.y + 2,
                 width: area.width - 4,
-                height: area.height - 5,
+                height: area.height - 3,
             };
 
             let mut state = ListState::default();
@@ -97,9 +97,9 @@ pub fn render_chapter_list(f: &mut Frame, app: &App) {
 
     let help_area = Rect {
         x: area.x,
-        y: area.height - 3,
+        y: area.height - 1,
         width: area.width,
-        height: 3,
+        height: 1,
     };
 
     f.render_widget(help, help_area);

@@ -61,7 +61,7 @@ pub fn render_search(f: &mut Frame, app: &App) {
             x: area.x + 2,
             y: area.y + 5,
             width: area.width - 4,
-            height: area.height - 8,
+            height: area.height - 6,
         };
 
         let mut state = ListState::default();
@@ -90,9 +90,9 @@ pub fn render_search(f: &mut Frame, app: &App) {
 
     let help_area = Rect {
         x: area.x,
-        y: area.height - 3,
+        y: area.height - 1,
         width: area.width,
-        height: 3,
+        height: 1,
     };
 
     f.render_widget(help, help_area);
