@@ -1,6 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
+use super::utils::render_help_info;
 use crate::app::App;
 
 pub fn render_chapter_list(f: &mut Frame, app: &App) {
@@ -91,16 +92,5 @@ pub fn render_chapter_list(f: &mut Frame, app: &App) {
 
     // 创建帮助信息
     let help_text = "↑/↓: 选择章节 | Enter: 跳转到章节 | Esc/q: 返回阅读";
-    let help = Paragraph::new(help_text)
-        .style(Style::default().fg(Color::Gray))
-        .alignment(Alignment::Center);
-
-    let help_area = Rect {
-        x: area.x,
-        y: area.height - 1,
-        width: area.width,
-        height: 1,
-    };
-
-    f.render_widget(help, help_area);
+    render_help_info(f, help_text, area);
 }

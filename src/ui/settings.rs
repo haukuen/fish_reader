@@ -1,6 +1,7 @@
 use ratatui::prelude::*;
 use ratatui::widgets::*;
 
+use super::utils::render_help_info;
 use crate::app::App;
 
 pub fn render_settings(f: &mut Frame, app: &App) {
@@ -85,16 +86,5 @@ pub fn render_settings(f: &mut Frame, app: &App) {
     } else {
         "↑/↓: 选择记录 | D/d: 删除选中记录 | Esc/q: 返回书架"
     };
-    let help = Paragraph::new(help_text)
-        .style(Style::default().fg(Color::Gray))
-        .alignment(Alignment::Center);
-
-    let help_area = Rect {
-        x: area.x,
-        y: area.height - 1,
-        width: area.width,
-        height: 1,
-    };
-
-    f.render_widget(help, help_area);
+    render_help_info(f, help_text, area);
 }
