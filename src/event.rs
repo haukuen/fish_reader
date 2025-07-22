@@ -1,6 +1,20 @@
 use crate::app::App;
 use crate::state::AppState;
 use crossterm::event::{KeyCode, MouseEvent, MouseEventKind};
+use unicode_width::UnicodeWidthStr;
+
+/// 估算一个字符串在换行时将占据的物理行数。
+fn count_physical_lines(line: &str, width: usize) -> usize {
+    if line.is_empty() {
+        return 1; // 空行也会占用一个物理行
+    }
+    if width == 0 {
+        return 1;
+    }
+    // 计算字符串的总宽度，并除以可用宽度。
+    // 向上取整以得到行数。
+    (line.width() + width - 1) / width
+}
 
 pub fn handle_key(app: &mut App, key: KeyCode) {
     match app.state {
@@ -93,6 +107,7 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
         let lines: Vec<&str> = novel.content.lines().collect();
         let max_scroll = lines.len().saturating_sub(1);
 
+        let content_width = app.terminal_size.width.saturating_sub(4) as usize;
         let content_height = (app.terminal_size.height as usize)
             .saturating_sub(1) // 帮助信息1行
             .saturating_sub(2) // 上下边框各占1行
@@ -128,13 +143,41 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
             }
             KeyCode::Left | KeyCode::Char('h') => {
                 // 向上翻页
-                novel.progress.scroll_offset =
-                    novel.progress.scroll_offset.saturating_sub(page_size);
+                let mut physical_lines_in_prev_page = 0;
+                let mut logical_lines_to_jump = 0;
+
+                // 从当前行向后迭代以找到前一页的开头
+                for line in lines.iter().take(novel.progress.scroll_offset).rev() {
+                    let line_height = count_physical_lines(line, content_width);
+                    if physical_lines_in_prev_page + line_height > page_size {
+                        break;
+                    }
+                    physical_lines_in_prev_page += line_height;
+                    logical_lines_to_jump += 1;
+                }
+
+                novel.progress.scroll_offset = novel
+                    .progress
+                    .scroll_offset
+                    .saturating_sub(logical_lines_to_jump.max(1));
             }
             KeyCode::Right | KeyCode::Char('l') => {
-                let max_offset = lines.len().saturating_sub(content_height);
+                // 向下翻页
+                let mut physical_lines_on_current_page = 0;
+                let mut logical_lines_to_jump = 0;
+
+                for line in lines.iter().skip(novel.progress.scroll_offset) {
+                    let line_height = count_physical_lines(line, content_width);
+                    if physical_lines_on_current_page + line_height > page_size {
+                        break;
+                    }
+                    physical_lines_on_current_page += line_height;
+                    logical_lines_to_jump += 1;
+                }
+
+                let jump = logical_lines_to_jump.max(1);
                 novel.progress.scroll_offset =
-                    (novel.progress.scroll_offset + page_size).min(max_offset);
+                    (novel.progress.scroll_offset + jump).min(max_scroll);
             }
             KeyCode::Char('/') => {
                 // 进入搜索模式
