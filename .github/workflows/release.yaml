@@ -50,25 +50,14 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build
-        run: |
-          cargo build --release --target ${{ matrix.target }}
-          ls -la target/${{ matrix.target }}/release/
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Prepare artifact
         shell: bash
         run: |
-          echo "Looking for: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}"
-          if [[ -f "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" ]]; then
-            cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
-            if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
-              chmod +x ${{ matrix.asset_name }}
-            fi
-            echo "Successfully prepared: ${{ matrix.asset_name }}"
-          else
-            echo "Error: File not found - target/${{ matrix.target }}/release/${{ matrix.artifact_name }}"
-            echo "Contents of target/${{ matrix.target }}/release/:"
-            ls -la target/${{ matrix.target }}/release/ || echo "Directory does not exist"
-            exit 1
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+          if [[ "${{ matrix.os }}" != "windows-latest" ]]; then
+            chmod +x ${{ matrix.asset_name }}
           fi
 
       - name: Upload artifact
