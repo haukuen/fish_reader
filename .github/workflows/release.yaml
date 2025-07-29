@@ -56,7 +56,8 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            7z a ${{ matrix.asset_name }} target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+            cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} .
+            7z a ${{ matrix.asset_name }} ${{ matrix.artifact_name }}
           else
             chmod +x target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
             tar -czf ${{ matrix.asset_name }} -C target/${{ matrix.target }}/release/ ${{ matrix.artifact_name }}
