@@ -4,6 +4,22 @@
 
 ## 安装
 
+### Windows
+
+#### 使用 scoop 安装
+
+添加 endless 仓库
+```bash
+scoop bucket add endless https://github.com/haukuen/endless
+```
+
+安装 fish_reader
+```bash
+scoop install fish_reader
+```
+
+### Other
+
 1.  从 [Releases](https://github.com/haukuen/fish_reader/releases) 页面下载合适版本。
 2.  将下载的可执行文件 `fr` 放置在 `PATH` 环境变量所包含的目录中（例如 `/usr/local/bin`）。
 
