@@ -107,6 +107,23 @@ impl Novel {
             }
         }
 
+        // 检查数字+点号+章节名格式 (如 "001.网咖系统与看板娘")
+        if let Some(dot_pos) = line.find('.') {
+            if dot_pos > 0 && dot_pos < line.len() - 1 {
+                let number_part = &line[0..dot_pos];
+                let title_part = &line[dot_pos + 1..];
+                // 数字部分全是数字，标题部分不为空且包含字母或中文字符
+                if number_part.chars().all(|c| c.is_ascii_digit())
+                    && !title_part.trim().is_empty()
+                    && title_part.trim().chars().any(|c| c.is_alphabetic())
+                    && number_part.len() >= 1
+                    && number_part.len() <= 6
+                {
+                    return true;
+                }
+            }
+        }
+
         // 检查纯数字章节 (如 "1." "2、")
         if line.len() <= 10 {
             let chars: Vec<char> = line.chars().collect();
@@ -177,8 +194,12 @@ mod tests {
         assert!(novel.is_chapter_title("序章"));
         assert!(novel.is_chapter_title("123."));
         assert!(novel.is_chapter_title("一二三、"));
+        assert!(novel.is_chapter_title("001.网咖系统与看板娘"));
+        assert!(novel.is_chapter_title("1.开始"));
+        assert!(novel.is_chapter_title("999.结束"));
         assert!(!novel.is_chapter_title("This is a normal line."));
-        assert!(!novel.is_chapter_title("第一 章")); // space
+        assert!(!novel.is_chapter_title("第一 章"));
+        assert!(!novel.is_chapter_title(".无数字开头"));
     }
 
     #[test]
