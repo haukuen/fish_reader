@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::model::library::{Library, NovelInfo};
 use crate::model::novel::Novel;
-use crate::state::AppState;
+use crate::state::{AppState, SettingsMode};
 
 pub struct App {
     /// 当前应用状态（书架/阅读/搜索/章节目录模式）
@@ -35,6 +35,12 @@ pub struct App {
     pub orphaned_novels: Vec<NovelInfo>,
     /// 设置页面中选中的孤立小说索引
     pub selected_orphaned_index: Option<usize>,
+    /// 设置界面的当前模式
+    pub settings_mode: SettingsMode,
+    /// 设置主菜单选中的选项索引
+    pub selected_settings_option: Option<usize>,
+    /// 删除小说模式下选中的小说索引
+    pub selected_delete_novel_index: Option<usize>,
 }
 
 impl App {
@@ -64,6 +70,9 @@ impl App {
             previous_state: AppState::Bookshelf,
             orphaned_novels: Vec::new(),
             selected_orphaned_index: None,
+            settings_mode: SettingsMode::MainMenu,
+            selected_settings_option: None,
+            selected_delete_novel_index: None,
         };
 
         // 检测孤立的小说记录
@@ -184,6 +193,39 @@ impl App {
         // 重置选中索引
         self.selected_orphaned_index = None;
     }
+
+    /// 删除选中的小说文件和进度记录
+    /// # 参数
+    /// - `index`: 要删除的小说在novels列表中的索引
+    /// # 功能
+    /// 1. 删除物理文件
+    /// 2. 从novels列表中移除
+    /// 3. 从library中移除进度记录
+    /// 4. 保存library更改
+    pub fn delete_novel(&mut self, index: usize) -> Result<()> {
+        if index < self.novels.len() {
+            let novel = &self.novels[index];
+
+            if novel.path.exists() {
+                std::fs::remove_file(&novel.path)?;
+            }
+
+            self.library.novels.retain(|n| n.path != novel.path);
+
+            self.novels.remove(index);
+
+            self.library.save()?;
+
+            // 调整选中索引
+            if !self.novels.is_empty() {
+                let new_index = index.min(self.novels.len() - 1);
+                self.selected_delete_novel_index = Some(new_index);
+            } else {
+                self.selected_delete_novel_index = None;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -208,6 +250,9 @@ mod tests {
             previous_state: AppState::Bookshelf,
             orphaned_novels: Vec::new(),
             selected_orphaned_index: None,
+            settings_mode: SettingsMode::MainMenu,
+            selected_settings_option: None,
+            selected_delete_novel_index: None,
         }
     }
 

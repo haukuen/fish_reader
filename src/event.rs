@@ -323,12 +323,128 @@ fn handle_chapter_list_key(app: &mut App, key: KeyCode) {
 /// # 参数
 /// - `key`: 按下的键位代码
 /// # 功能
-/// 处理孤立记录的选择和删除操作
+/// 处理设置界面的二级菜单导航和操作
 fn handle_settings_key(app: &mut App, key: KeyCode) {
+    use crate::state::SettingsMode;
+
+    match app.settings_mode {
+        SettingsMode::MainMenu => handle_settings_main_menu_key(app, key),
+        SettingsMode::DeleteNovel => handle_delete_novel_key(app, key),
+        SettingsMode::DeleteOrphaned => handle_delete_orphaned_key(app, key),
+    }
+}
+
+/// 处理设置主菜单的键盘事件
+fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
+    use crate::state::SettingsMode;
+
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
             // 返回书架
             app.state = AppState::Bookshelf;
+            app.settings_mode = SettingsMode::MainMenu;
+            app.selected_settings_option = None;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            let menu_count = 2; // 删除小说、清理孤立记录
+            if menu_count > 0 {
+                let current = app.selected_settings_option.unwrap_or(0);
+                let next = if current > 0 {
+                    current - 1
+                } else {
+                    menu_count - 1
+                };
+                app.selected_settings_option = Some(next);
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            let menu_count = 2; // 删除小说、清理孤立记录
+            if menu_count > 0 {
+                if app.selected_settings_option.is_none() {
+                    app.selected_settings_option = Some(0);
+                } else {
+                    let current = app.selected_settings_option.unwrap();
+                    let next = (current + 1) % menu_count;
+                    app.selected_settings_option = Some(next);
+                }
+            }
+        }
+        KeyCode::Enter => {
+            if let Some(index) = app.selected_settings_option {
+                match index {
+                    0 => {
+                        // 进入删除小说模式
+                        app.settings_mode = SettingsMode::DeleteNovel;
+                        app.selected_delete_novel_index = if !app.novels.is_empty() {
+                            Some(0)
+                        } else {
+                            None
+                        };
+                    }
+                    1 => {
+                        // 进入删除孤立记录模式
+                        app.settings_mode = SettingsMode::DeleteOrphaned;
+                        app.detect_orphaned_novels();
+                    }
+                    _ => {}
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 处理删除小说模式的键盘事件
+fn handle_delete_novel_key(app: &mut App, key: KeyCode) {
+    use crate::state::SettingsMode;
+
+    match key {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
+            // 返回设置主菜单
+            app.settings_mode = SettingsMode::MainMenu;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if !app.novels.is_empty() {
+                let current = app.selected_delete_novel_index.unwrap_or(0);
+                let next = if current > 0 {
+                    current - 1
+                } else {
+                    app.novels.len() - 1
+                };
+                app.selected_delete_novel_index = Some(next);
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if !app.novels.is_empty() {
+                if app.selected_delete_novel_index.is_none() {
+                    app.selected_delete_novel_index = Some(0);
+                } else {
+                    let current = app.selected_delete_novel_index.unwrap();
+                    let next = (current + 1) % app.novels.len();
+                    app.selected_delete_novel_index = Some(next);
+                }
+            }
+        }
+        KeyCode::Char('d') | KeyCode::Char('D') => {
+            // 删除选中的小说
+            if let Some(index) = app.selected_delete_novel_index {
+                if index < app.novels.len() {
+                    let _ = app.delete_novel(index);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 处理删除孤立记录模式的键盘事件
+fn handle_delete_orphaned_key(app: &mut App, key: KeyCode) {
+    use crate::state::SettingsMode;
+
+    match key {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
+            // 返回设置主菜单
+            app.settings_mode = SettingsMode::MainMenu;
         }
         KeyCode::Up | KeyCode::Char('k') => {
             if !app.orphaned_novels.is_empty() {
@@ -357,11 +473,8 @@ fn handle_settings_key(app: &mut App, key: KeyCode) {
             if let Some(index) = app.selected_orphaned_index {
                 if index < app.orphaned_novels.len() {
                     let orphaned_novel = &app.orphaned_novels[index];
-
                     app.library.novels.retain(|n| n.path != orphaned_novel.path);
-
                     let _ = app.library.save();
-
                     app.detect_orphaned_novels();
 
                     // 调整选中索引
