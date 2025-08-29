@@ -1,8 +1,58 @@
 use ratatui::prelude::*;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::*;
 
 use super::utils::render_help_info;
 use crate::app::App;
+
+/// 创建带高亮的文本行
+/// # 参数
+/// - `text`: 原始文本
+/// - `search_term`: 搜索关键词
+/// # 返回
+/// 返回包含高亮显示的Line对象
+fn create_highlighted_line(text: &str, search_term: &str) -> Line<'static> {
+    if search_term.is_empty() {
+        return Line::from(text.to_string());
+    }
+
+    let mut spans = Vec::new();
+    let text_lower = text.to_lowercase();
+    let search_lower = search_term.to_lowercase();
+    let mut last_end = 0;
+
+    // 查找所有匹配位置
+    while let Some(start) = text_lower[last_end..].find(&search_lower) {
+        let actual_start = last_end + start;
+        let actual_end = actual_start + search_term.len();
+
+        // 添加匹配前的普通文本
+        if actual_start > last_end {
+            spans.push(Span::styled(
+                text[last_end..actual_start].to_string(),
+                Style::default().fg(Color::White),
+            ));
+        }
+
+        // 添加高亮的匹配文本
+        spans.push(Span::styled(
+            text[actual_start..actual_end].to_string(),
+            Style::default().fg(Color::Black).bg(Color::Yellow),
+        ));
+
+        last_end = actual_end;
+    }
+
+    // 添加剩余的普通文本
+    if last_end < text.len() {
+        spans.push(Span::styled(
+            text[last_end..].to_string(),
+            Style::default().fg(Color::White),
+        ));
+    }
+
+    Line::from(spans)
+}
 
 pub fn render_search(f: &mut Frame, app: &App) {
     let area = f.area();
@@ -48,8 +98,17 @@ pub fn render_search(f: &mut Frame, app: &App) {
                 } else {
                     "   "
                 };
-                let display_text = format!("{}{}: {}", prefix, line_num + 1, content.trim());
-                ListItem::new(display_text).style(Style::default().fg(Color::White))
+
+                // 创建行号前缀
+                let line_prefix = format!("{}{}: ", prefix, line_num + 1);
+                let mut line_spans =
+                    vec![Span::styled(line_prefix, Style::default().fg(Color::Cyan))];
+
+                // 创建高亮的内容部分
+                let highlighted_line = create_highlighted_line(content.trim(), &app.search_input);
+                line_spans.extend(highlighted_line.spans);
+
+                ListItem::new(Line::from(line_spans))
             })
             .collect();
 
