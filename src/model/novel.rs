@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Novel {
@@ -166,11 +167,108 @@ pub struct Chapter {
     pub start_line: usize,
 }
 
+/// 书签信息结构
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Bookmark {
+    /// 书签名称
+    pub name: String,
+    /// 书签位置（行号）
+    pub position: usize,
+    /// 创建时间戳
+    pub timestamp: u64,
+}
+
+impl Bookmark {
+    /// 创建新书签
+    /// # 参数
+    /// - `name`: 书签名称
+    /// - `position`: 书签位置（行号）
+    pub fn new(name: String, position: usize) -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        Bookmark {
+            name,
+            position,
+            timestamp,
+        }
+    }
+
+    /// 格式化显示时间
+    #[allow(dead_code)]
+    pub fn format_time(&self) -> String {
+        let datetime = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(self.timestamp);
+        // 简单的时间格式化，实际项目中可能需要更复杂的格式化
+        format!("{:?}", datetime)
+    }
+}
+
 /// 阅读进度跟踪结构
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ReadingProgress {
     /// 滚动偏移量（用于界面渲染）
     pub scroll_offset: usize,
+    /// 书签列表
+    pub bookmarks: Vec<Bookmark>,
+}
+
+impl ReadingProgress {
+    /// 添加书签
+    /// # 参数
+    /// - `name`: 书签名称
+    /// - `position`: 书签位置（行号）
+    pub fn add_bookmark(&mut self, name: String, position: usize) {
+        let bookmark = Bookmark::new(name, position);
+        self.bookmarks.push(bookmark);
+        // 按位置排序书签
+        self.bookmarks.sort_by(|a, b| a.position.cmp(&b.position));
+    }
+
+    /// 删除书签
+    /// # 参数
+    /// - `index`: 书签在列表中的索引
+    pub fn remove_bookmark(&mut self, index: usize) -> Option<Bookmark> {
+        if index < self.bookmarks.len() {
+            Some(self.bookmarks.remove(index))
+        } else {
+            None
+        }
+    }
+
+    /// 根据名称查找书签
+    /// # 参数
+    /// - `name`: 书签名称
+    /// # 返回
+    /// 返回书签的索引，如果未找到则返回None
+    #[allow(dead_code)]
+    pub fn find_bookmark_by_name(&self, name: &str) -> Option<usize> {
+        self.bookmarks.iter().position(|b| b.name == name)
+    }
+
+    /// 获取指定位置附近的书签
+    /// # 参数
+    /// - `position`: 当前位置
+    /// - `range`: 搜索范围
+    /// # 返回
+    /// 返回范围内的书签索引列表
+    #[allow(dead_code)]
+    pub fn get_bookmarks_near_position(&self, position: usize, range: usize) -> Vec<usize> {
+        self.bookmarks
+            .iter()
+            .enumerate()
+            .filter(|(_, bookmark)| {
+                let diff = if bookmark.position > position {
+                    bookmark.position - position
+                } else {
+                    position - bookmark.position
+                };
+                diff <= range
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
 }
 
 #[cfg(test)]

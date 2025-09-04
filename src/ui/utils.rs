@@ -4,7 +4,7 @@ use ratatui::widgets::*;
 use crate::app::App;
 use crate::state::AppState;
 
-use super::{bookshelf, chapter_list, reader, search, settings};
+use super::{bookmark, bookshelf, chapter_list, reader, search, settings};
 
 /// 渲染帮助信息的通用函数
 ///
@@ -39,5 +39,6 @@ pub fn render(f: &mut Frame, app: &App) {
         AppState::Searching => search::render_search(f, app),
         AppState::ChapterList => chapter_list::render_chapter_list(f, app),
         AppState::Settings => settings::render_settings(f, app),
+        AppState::BookmarkList | AppState::BookmarkAdd => bookmark::render_bookmark(f, app),
     }
 }

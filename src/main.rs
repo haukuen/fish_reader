@@ -74,7 +74,7 @@ fn run(app: &mut App) -> Result<()> {
     // 保存阅读进度
     if let Some(novel) = &app.current_novel {
         app.library
-            .update_novel_progress(&novel.path, novel.progress);
+            .update_novel_progress(&novel.path, novel.progress.clone());
     }
     let _ = app.library.save();
 

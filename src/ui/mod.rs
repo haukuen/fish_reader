@@ -1,3 +1,4 @@
+pub mod bookmark;
 pub mod bookshelf;
 pub mod chapter_list;
 pub mod reader;

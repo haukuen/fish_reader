@@ -79,7 +79,7 @@ impl Library {
         self.novels
             .iter()
             .find(|n| n.path == novel_path)
-            .map(|n| n.progress)
+            .map(|n| n.progress.clone())
             .unwrap_or_default()
     }
 }
@@ -93,15 +93,21 @@ mod tests {
     fn test_update_and_get_progress() {
         let mut library = Library::new();
         let novel_path = PathBuf::from("/path/to/novel.txt");
-        let progress = ReadingProgress { scroll_offset: 100 };
+        let progress = ReadingProgress {
+            scroll_offset: 100,
+            bookmarks: Vec::new(),
+        };
 
-        library.update_novel_progress(&novel_path, progress);
+        library.update_novel_progress(&novel_path, progress.clone());
         assert_eq!(library.get_novel_progress(&novel_path), progress);
         assert_eq!(library.novels.len(), 1);
         assert_eq!(library.novels[0].title, "novel");
 
-        let new_progress = ReadingProgress { scroll_offset: 200 };
-        library.update_novel_progress(&novel_path, new_progress);
+        let new_progress = ReadingProgress {
+            scroll_offset: 200,
+            bookmarks: Vec::new(),
+        };
+        library.update_novel_progress(&novel_path, new_progress.clone());
         assert_eq!(library.get_novel_progress(&novel_path), new_progress);
         assert_eq!(library.novels.len(), 1);
     }

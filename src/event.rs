@@ -23,6 +23,110 @@ pub fn handle_key(app: &mut App, key: KeyCode) {
         AppState::Searching => handle_search_key(app, key),
         AppState::ChapterList => handle_chapter_list_key(app, key),
         AppState::Settings => handle_settings_key(app, key),
+        AppState::BookmarkList => handle_bookmark_list_key(app, key),
+        AppState::BookmarkAdd => handle_bookmark_add_key(app, key),
+    }
+}
+
+/// 处理书签列表模式下的键盘事件
+/// # 参数
+/// - `key`: 按下的键位代码
+/// # 功能
+/// 处理书签选择、跳转和删除
+fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
+    match key {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
+            // 返回上一个状态
+            app.state = app.previous_state.clone();
+        }
+        KeyCode::Enter => {
+            if let Some(index) = app.selected_bookmark_index {
+                // 跳转到选中的书签
+                if app.jump_to_bookmark(index).is_some() {
+                    app.state = AppState::Reading;
+                }
+            }
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            if let Some(bookmarks) = app.get_current_bookmarks() {
+                if !bookmarks.is_empty() {
+                    let current = app.selected_bookmark_index.unwrap_or(0);
+                    let next = if current > 0 {
+                        current - 1
+                    } else {
+                        bookmarks.len() - 1
+                    };
+                    app.selected_bookmark_index = Some(next);
+                }
+            }
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            if let Some(bookmarks) = app.get_current_bookmarks() {
+                if !bookmarks.is_empty() {
+                    if app.selected_bookmark_index.is_none() {
+                        app.selected_bookmark_index = Some(0);
+                    } else {
+                        let current = app.selected_bookmark_index.unwrap();
+                        let next = (current + 1) % bookmarks.len();
+                        app.selected_bookmark_index = Some(next);
+                    }
+                }
+            }
+        }
+        KeyCode::Char('d') | KeyCode::Char('D') => {
+            // 删除选中的书签
+            if let Some(index) = app.selected_bookmark_index {
+                if app.remove_bookmark(index).is_some() {
+                    // 调整选中索引
+                    if let Some(bookmarks) = app.get_current_bookmarks() {
+                        if !bookmarks.is_empty() {
+                            let new_index = index.min(bookmarks.len() - 1);
+                            app.selected_bookmark_index = Some(new_index);
+                        } else {
+                            app.selected_bookmark_index = None;
+                        }
+                    }
+                }
+            }
+        }
+        KeyCode::Char('a') | KeyCode::Char('A') => {
+            // 进入添加书签模式
+            app.state = AppState::BookmarkAdd;
+            app.clear_bookmark_inputs();
+        }
+        _ => {}
+    }
+}
+
+/// 处理添加书签模式下的键盘事件
+/// # 参数
+/// - `key`: 按下的键位代码
+/// # 功能
+/// 处理书签名称和描述输入
+fn handle_bookmark_add_key(app: &mut App, key: KeyCode) {
+    match key {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
+            // 取消添加，返回上一个状态
+            app.state = app.previous_state.clone();
+            app.clear_bookmark_inputs();
+        }
+        KeyCode::Enter => {
+            // 确认添加书签
+            if !app.bookmark_input.trim().is_empty() {
+                app.add_bookmark(app.bookmark_input.clone());
+                app.state = AppState::BookmarkList;
+                app.clear_bookmark_inputs();
+            }
+        }
+        KeyCode::Backspace => {
+            // 删除输入的最后一个字符
+            app.bookmark_input.pop();
+        }
+        KeyCode::Char(c) => {
+            // 添加字符到书签名称输入框
+            app.bookmark_input.push(c);
+        }
+        _ => {}
     }
 }
 
@@ -35,6 +139,8 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
             AppState::ChapterList => handle_chapter_list_key(app, KeyCode::Up),
             AppState::Settings => handle_settings_key(app, KeyCode::Up),
             AppState::Searching => handle_search_key(app, KeyCode::Up),
+            AppState::BookmarkList => handle_bookmark_list_key(app, KeyCode::Up),
+            AppState::BookmarkAdd => {} // 添加书签模式不处理滚动
         },
         MouseEventKind::ScrollDown => match app.state {
             AppState::Reading => handle_reader_key(app, KeyCode::Down),
@@ -42,6 +148,8 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
             AppState::ChapterList => handle_chapter_list_key(app, KeyCode::Down),
             AppState::Settings => handle_settings_key(app, KeyCode::Down),
             AppState::Searching => handle_search_key(app, KeyCode::Down),
+            AppState::BookmarkList => handle_bookmark_list_key(app, KeyCode::Down),
+            AppState::BookmarkAdd => {} // 添加书签模式不处理滚动
         },
         _ => {}
     }
@@ -116,16 +224,16 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
 
         match key {
             KeyCode::Char('q') | KeyCode::Char('Q') => {
-                // 保存阅读进度
+                // 保存进度
                 app.library
-                    .update_novel_progress(&novel.path, novel.progress);
+                    .update_novel_progress(&novel.path, novel.progress.clone());
                 let _ = app.library.save();
                 app.should_quit = true;
             }
             KeyCode::Esc => {
                 // 保存阅读进度并返回书架
                 app.library
-                    .update_novel_progress(&novel.path, novel.progress);
+                    .update_novel_progress(&novel.path, novel.progress.clone());
                 let _ = app.library.save();
                 app.state = AppState::Bookshelf;
             }
@@ -194,6 +302,18 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
                 // 根据当前阅读位置自动选择最接近的章节
                 app.selected_chapter_index = app.find_current_chapter_index();
             }
+            KeyCode::Char('b') | KeyCode::Char('B') => {
+                // 进入书签列表模式
+                app.previous_state = AppState::Reading;
+                app.state = AppState::BookmarkList;
+                app.selected_bookmark_index = None;
+            }
+            KeyCode::Char('m') | KeyCode::Char('M') => {
+                // 进入添加书签模式
+                app.previous_state = AppState::Reading;
+                app.state = AppState::BookmarkAdd;
+                app.clear_bookmark_inputs();
+            }
             _ => {}
         }
     }
@@ -219,7 +339,7 @@ fn handle_search_key(app: &mut App, key: KeyCode) {
                         novel.progress.scroll_offset = line_num;
                         // 保存进度
                         app.library
-                            .update_novel_progress(&novel.path, novel.progress);
+                            .update_novel_progress(&novel.path, novel.progress.clone());
                         let _ = app.library.save();
                     }
                     app.state = AppState::Reading;
@@ -282,7 +402,7 @@ fn handle_chapter_list_key(app: &mut App, key: KeyCode) {
                         novel.progress.scroll_offset = chapter.start_line;
                         // 保存进度
                         app.library
-                            .update_novel_progress(&novel.path, novel.progress);
+                            .update_novel_progress(&novel.path, novel.progress.clone());
                         let _ = app.library.save();
                         app.state = AppState::Reading;
                     }

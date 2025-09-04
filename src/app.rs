@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::model::library::{Library, NovelInfo};
 use crate::model::novel::Novel;
-use crate::state::{AppState, SettingsMode};
+use crate::state::{AppState, BookmarkMode, SettingsMode};
 
 pub struct App {
     /// 当前应用状态（书架/阅读/搜索/章节目录模式）
@@ -41,6 +41,13 @@ pub struct App {
     pub selected_settings_option: Option<usize>,
     /// 删除小说模式下选中的小说索引
     pub selected_delete_novel_index: Option<usize>,
+    /// 书签管理模式
+    #[allow(dead_code)]
+    pub bookmark_mode: BookmarkMode,
+    /// 当前选中的书签索引
+    pub selected_bookmark_index: Option<usize>,
+    /// 添加书签时的输入内容
+    pub bookmark_input: String,
 }
 
 impl App {
@@ -73,6 +80,9 @@ impl App {
             settings_mode: SettingsMode::MainMenu,
             selected_settings_option: None,
             selected_delete_novel_index: None,
+            bookmark_mode: BookmarkMode::List,
+            selected_bookmark_index: None,
+            bookmark_input: String::new(),
         };
 
         // 检测孤立的小说记录
@@ -226,6 +236,66 @@ impl App {
         }
         Ok(())
     }
+
+    /// 添加书签到当前小说
+    /// # 参数
+    /// - `name`: 书签名称
+    pub fn add_bookmark(&mut self, name: String) {
+        if let Some(novel) = &mut self.current_novel {
+            let position = novel.progress.scroll_offset;
+            novel.progress.add_bookmark(name, position);
+
+            // 更新library中的进度
+            self.library
+                .update_novel_progress(&novel.path, novel.progress.clone());
+            let _ = self.library.save();
+        }
+    }
+
+    /// 删除当前小说的书签
+    /// # 参数
+    /// - `index`: 书签索引
+    pub fn remove_bookmark(&mut self, index: usize) -> Option<()> {
+        if let Some(novel) = &mut self.current_novel {
+            if novel.progress.remove_bookmark(index).is_some() {
+                // 更新library中的进度
+                self.library
+                    .update_novel_progress(&novel.path, novel.progress.clone());
+                let _ = self.library.save();
+                return Some(());
+            }
+        }
+        None
+    }
+
+    /// 跳转到指定书签位置
+    /// # 参数
+    /// - `index`: 书签索引
+    pub fn jump_to_bookmark(&mut self, index: usize) -> Option<()> {
+        if let Some(novel) = &mut self.current_novel {
+            if let Some(bookmark) = novel.progress.bookmarks.get(index) {
+                novel.progress.scroll_offset = bookmark.position;
+                // 更新library中的进度
+                self.library
+                    .update_novel_progress(&novel.path, novel.progress.clone());
+                let _ = self.library.save();
+                return Some(());
+            }
+        }
+        None
+    }
+
+    /// 获取当前小说的书签列表
+    pub fn get_current_bookmarks(&self) -> Option<&Vec<crate::model::novel::Bookmark>> {
+        self.current_novel
+            .as_ref()
+            .map(|novel| &novel.progress.bookmarks)
+    }
+
+    /// 清空书签输入框
+    pub fn clear_bookmark_inputs(&mut self) {
+        self.bookmark_input.clear();
+    }
 }
 
 #[cfg(test)]
@@ -253,6 +323,9 @@ mod tests {
             settings_mode: SettingsMode::MainMenu,
             selected_settings_option: None,
             selected_delete_novel_index: None,
+            bookmark_mode: BookmarkMode::List,
+            selected_bookmark_index: None,
+            bookmark_input: String::new(),
         }
     }
 
@@ -294,13 +367,22 @@ mod tests {
         ];
         app.current_novel = Some(novel);
 
-        app.current_novel.as_mut().unwrap().progress = ReadingProgress { scroll_offset: 5 };
+        app.current_novel.as_mut().unwrap().progress = ReadingProgress {
+            scroll_offset: 5,
+            bookmarks: Vec::new(),
+        };
         assert_eq!(app.find_current_chapter_index(), Some(0));
 
-        app.current_novel.as_mut().unwrap().progress = ReadingProgress { scroll_offset: 15 };
+        app.current_novel.as_mut().unwrap().progress = ReadingProgress {
+            scroll_offset: 15,
+            bookmarks: Vec::new(),
+        };
         assert_eq!(app.find_current_chapter_index(), Some(1));
 
-        app.current_novel.as_mut().unwrap().progress = ReadingProgress { scroll_offset: 25 };
+        app.current_novel.as_mut().unwrap().progress = ReadingProgress {
+            scroll_offset: 25,
+            bookmarks: Vec::new(),
+        };
         assert_eq!(app.find_current_chapter_index(), Some(2));
     }
 }

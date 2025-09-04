@@ -5,6 +5,8 @@ pub enum AppState {
     Searching,
     ChapterList,
     Settings,
+    BookmarkList,
+    BookmarkAdd,
 }
 
 /// 设置界面的子模式
@@ -16,4 +18,14 @@ pub enum SettingsMode {
     DeleteNovel,
     /// 删除孤立记录模式
     DeleteOrphaned,
+}
+
+/// 书签管理模式
+#[derive(Clone, PartialEq, Debug)]
+pub enum BookmarkMode {
+    /// 书签列表模式
+    List,
+    /// 添加书签模式
+    #[allow(dead_code)]
+    Add,
 }
