@@ -72,7 +72,7 @@ pub fn render_search(f: &mut Frame, app: &App) {
     f.render_widget(title, title_area);
 
     // 创建搜索输入框
-    let search_text = format!("搜索: {}", app.search_input);
+    let search_text = format!("搜索: {}", app.search.input);
     let search_input = Paragraph::new(search_text)
         .style(Style::default().fg(Color::White))
         .block(Block::default().borders(Borders::ALL).title("输入搜索内容"));
@@ -87,13 +87,14 @@ pub fn render_search(f: &mut Frame, app: &App) {
     f.render_widget(search_input, input_area);
 
     // 创建搜索结果列表
-    if !app.search_results.is_empty() {
+    if !app.search.results.is_empty() {
         let items: Vec<ListItem> = app
-            .search_results
+            .search
+            .results
             .iter()
             .enumerate()
             .map(|(index, (line_num, content))| {
-                let prefix = if Some(index) == app.selected_search_index {
+                let prefix = if Some(index) == app.search.selected_index {
                     ">> "
                 } else {
                     "   "
@@ -105,7 +106,7 @@ pub fn render_search(f: &mut Frame, app: &App) {
                     vec![Span::styled(line_prefix, Style::default().fg(Color::Cyan))];
 
                 // 创建高亮的内容部分
-                let highlighted_line = create_highlighted_line(content.trim(), &app.search_input);
+                let highlighted_line = create_highlighted_line(content.trim(), &app.search.input);
                 line_spans.extend(highlighted_line.spans);
 
                 ListItem::new(Line::from(line_spans))
@@ -125,15 +126,15 @@ pub fn render_search(f: &mut Frame, app: &App) {
         };
 
         let mut state = ListState::default();
-        state.select(app.selected_search_index);
+        state.select(app.search.selected_index);
 
         // 计算滚动偏移，让选中的搜索结果显示在中间位置
-        if let Some(selected) = app.selected_search_index {
+        if let Some(selected) = app.search.selected_index {
             let visible_height = results_area.height.saturating_sub(2) as usize; // 减去边框
             let half_height = visible_height / 2;
 
             if selected >= half_height {
-                let max_offset = app.search_results.len().saturating_sub(visible_height);
+                let max_offset = app.search.results.len().saturating_sub(visible_height);
                 let offset = (selected.saturating_sub(half_height)).min(max_offset);
                 state = state.with_offset(offset);
             }

@@ -20,6 +20,7 @@ impl Novel {
     /// 创建新小说实例
     /// # 参数
     /// - `path`: 小说文件路径
+    ///
     /// 不会立即加载文件内容，需要显式调用load_content
     pub fn new(path: PathBuf) -> Self {
         let title = path
@@ -79,16 +80,16 @@ impl Novel {
 
         // 检查常见的章节标题模式
         let chapter_keywords = ['章', '回', '节', '卷', '部', '篇'];
-        if line.starts_with("第") {
-            if let Some(keyword_pos) = line.find(chapter_keywords) {
-                let start_index = "第".len();
-                // Ensure there is something between "第" and the keyword
-                if keyword_pos > start_index {
-                    let number_part = &line[start_index..keyword_pos];
-                    // The part between "第" and the keyword should not contain whitespace
-                    if !number_part.chars().any(|c| c.is_whitespace()) {
-                        return true;
-                    }
+        if line.starts_with("第")
+            && let Some(keyword_pos) = line.find(chapter_keywords)
+        {
+            let start_index = "第".len();
+            // Ensure there is something between "第" and the keyword
+            if keyword_pos > start_index {
+                let number_part = &line[start_index..keyword_pos];
+                // The part between "第" and the keyword should not contain whitespace
+                if !number_part.chars().any(|c| c.is_whitespace()) {
+                    return true;
                 }
             }
         }
@@ -109,19 +110,20 @@ impl Novel {
         }
 
         // 检查数字+点号+章节名格式 (如 "001.网咖系统与看板娘")
-        if let Some(dot_pos) = line.find('.') {
-            if dot_pos > 0 && dot_pos < line.len() - 1 {
-                let number_part = &line[0..dot_pos];
-                let title_part = &line[dot_pos + 1..];
-                // 数字部分全是数字，标题部分不为空且包含字母或中文字符
-                if number_part.chars().all(|c| c.is_ascii_digit())
-                    && !title_part.trim().is_empty()
-                    && title_part.trim().chars().any(|c| c.is_alphabetic())
-                    && number_part.len() >= 1
-                    && number_part.len() <= 6
-                {
-                    return true;
-                }
+        if let Some(dot_pos) = line.find('.')
+            && dot_pos > 0
+            && dot_pos < line.len() - 1
+        {
+            let number_part = &line[0..dot_pos];
+            let title_part = &line[dot_pos + 1..];
+            // 数字部分全是数字，标题部分不为空且包含字母或中文字符
+            if number_part.chars().all(|c| c.is_ascii_digit())
+                && !title_part.trim().is_empty()
+                && title_part.trim().chars().any(|c| c.is_alphabetic())
+                && !number_part.is_empty()
+                && number_part.len() <= 6
+            {
+                return true;
             }
         }
 
@@ -258,14 +260,7 @@ impl ReadingProgress {
         self.bookmarks
             .iter()
             .enumerate()
-            .filter(|(_, bookmark)| {
-                let diff = if bookmark.position > position {
-                    bookmark.position - position
-                } else {
-                    position - bookmark.position
-                };
-                diff <= range
-            })
+            .filter(|(_, bookmark)| bookmark.position.abs_diff(position) <= range)
             .map(|(index, _)| index)
             .collect()
     }

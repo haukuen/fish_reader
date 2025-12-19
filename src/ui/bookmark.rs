@@ -63,7 +63,7 @@ fn render_bookmark_list(f: &mut Frame, app: &App) {
                 .iter()
                 .enumerate()
                 .map(|(index, bookmark)| {
-                    let prefix = if Some(index) == app.selected_bookmark_index {
+                    let prefix = if Some(index) == app.bookmark.selected_index {
                         ">> "
                     } else {
                         "   "
@@ -98,10 +98,10 @@ fn render_bookmark_list(f: &mut Frame, app: &App) {
             };
 
             let mut state = ListState::default();
-            state.select(app.selected_bookmark_index);
+            state.select(app.bookmark.selected_index);
 
             // 计算滚动偏移，让选中的书签显示在中间位置
-            if let Some(selected) = app.selected_bookmark_index {
+            if let Some(selected) = app.bookmark.selected_index {
                 let visible_height = list_area.height.saturating_sub(2) as usize; // 减去边框
                 let half_height = visible_height / 2;
 
@@ -117,7 +117,7 @@ fn render_bookmark_list(f: &mut Frame, app: &App) {
     }
 
     // 创建帮助信息
-    let help_text = if app.get_current_bookmarks().map_or(true, |b| b.is_empty()) {
+    let help_text = if app.get_current_bookmarks().is_none_or(|b| b.is_empty()) {
         "a: 添加书签 | Esc/q: 返回阅读"
     } else {
         "↑/↓: 选择书签 | Enter: 跳转 | d: 删除 | a: 添加 | Esc/q: 返回阅读"
@@ -168,7 +168,7 @@ fn render_bookmark_add(f: &mut Frame, app: &App) {
     f.render_widget(position_paragraph, position_area);
 
     // 创建书签名称输入框
-    let name_text = format!("书签名称: {}", app.bookmark_input);
+    let name_text = format!("书签名称: {}", app.bookmark.input);
     let name_input = Paragraph::new(name_text)
         .style(Style::default().fg(Color::White))
         .block(Block::default().borders(Borders::ALL).title("输入书签名称"));

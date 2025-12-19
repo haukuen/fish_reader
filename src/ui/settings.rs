@@ -8,7 +8,7 @@ use crate::state::SettingsMode;
 pub fn render_settings(f: &mut Frame, app: &App) {
     let area = f.area();
 
-    match app.settings_mode {
+    match app.settings.mode {
         SettingsMode::MainMenu => render_settings_main_menu(f, app, area),
         SettingsMode::DeleteNovel => render_delete_novel_menu(f, app, area),
         SettingsMode::DeleteOrphaned => render_delete_orphaned_menu(f, app, area),
@@ -32,12 +32,12 @@ fn render_settings_main_menu(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(title, title_area);
 
     // 创建菜单选项
-    let menu_options = vec!["删除小说", "清理孤立记录"];
+    let menu_options = ["删除小说", "清理孤立记录"];
     let items: Vec<ListItem> = menu_options
         .iter()
         .enumerate()
         .map(|(index, option)| {
-            let prefix = if Some(index) == app.selected_settings_option {
+            let prefix = if Some(index) == app.settings.selected_option {
                 ">> "
             } else {
                 "   "
@@ -60,7 +60,7 @@ fn render_settings_main_menu(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let mut state = ListState::default();
-    state.select(app.selected_settings_option);
+    state.select(app.settings.selected_option);
 
     f.render_stateful_widget(menu_list, list_area, &mut state);
 
@@ -107,7 +107,7 @@ fn render_delete_novel_menu(f: &mut Frame, app: &App, area: Rect) {
             .iter()
             .enumerate()
             .map(|(index, novel)| {
-                let prefix = if Some(index) == app.selected_delete_novel_index {
+                let prefix = if Some(index) == app.settings.selected_delete_novel_index {
                     ">> "
                 } else {
                     "   "
@@ -134,7 +134,7 @@ fn render_delete_novel_menu(f: &mut Frame, app: &App, area: Rect) {
         };
 
         let mut state = ListState::default();
-        state.select(app.selected_delete_novel_index);
+        state.select(app.settings.selected_delete_novel_index);
 
         f.render_stateful_widget(novels_list, list_area, &mut state);
     }
@@ -164,7 +164,7 @@ fn render_delete_orphaned_menu(f: &mut Frame, app: &App, area: Rect) {
 
     f.render_widget(title, title_area);
 
-    if app.orphaned_novels.is_empty() {
+    if app.settings.orphaned_novels.is_empty() {
         // 没有孤立记录时显示提示信息
         let no_orphaned = Paragraph::new("没有发现孤立的小说记录")
             .style(Style::default().fg(Color::Green))
@@ -182,11 +182,12 @@ fn render_delete_orphaned_menu(f: &mut Frame, app: &App, area: Rect) {
     } else {
         // 显示孤立记录列表
         let items: Vec<ListItem> = app
+            .settings
             .orphaned_novels
             .iter()
             .enumerate()
             .map(|(index, novel_info)| {
-                let prefix = if Some(index) == app.selected_orphaned_index {
+                let prefix = if Some(index) == app.settings.selected_orphaned_index {
                     ">> "
                 } else {
                     "   "
@@ -202,11 +203,10 @@ fn render_delete_orphaned_menu(f: &mut Frame, app: &App, area: Rect) {
             .collect();
 
         let orphaned_list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(format!("孤立记录 (共{}条)", app.orphaned_novels.len())),
-            )
+            .block(Block::default().borders(Borders::ALL).title(format!(
+                "孤立记录 (共{}条)",
+                app.settings.orphaned_novels.len()
+            )))
             .highlight_style(Style::default().bg(Color::DarkGray))
             .highlight_symbol("");
 
@@ -218,13 +218,13 @@ fn render_delete_orphaned_menu(f: &mut Frame, app: &App, area: Rect) {
         };
 
         let mut state = ListState::default();
-        state.select(app.selected_orphaned_index);
+        state.select(app.settings.selected_orphaned_index);
 
         f.render_stateful_widget(orphaned_list, list_area, &mut state);
     }
 
     // 创建帮助信息
-    let help_text = if app.orphaned_novels.is_empty() {
+    let help_text = if app.settings.orphaned_novels.is_empty() {
         "Esc/q: 返回设置菜单"
     } else {
         "↑/↓: 选择记录 | D/d: 删除选中记录 | Esc/q: 返回设置菜单"

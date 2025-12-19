@@ -10,9 +10,10 @@ pub enum AppState {
 }
 
 /// 设置界面的子模式
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub enum SettingsMode {
     /// 主菜单：选择删除小说或删除孤立记录
+    #[default]
     MainMenu,
     /// 删除小说模式
     DeleteNovel,
@@ -21,9 +22,10 @@ pub enum SettingsMode {
 }
 
 /// 书签管理模式
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub enum BookmarkMode {
     /// 书签列表模式
+    #[default]
     List,
     /// 添加书签模式
     #[allow(dead_code)]
