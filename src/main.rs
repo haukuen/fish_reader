@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 use crate::app::App;
 
 fn main() -> Result<()> {
-    let _matches = Command::new("fish_reader")
+    Command::new("fish_reader")
         .version(env!("CARGO_PKG_VERSION"))
         .author("haukuen")
         .about("A terminal-based novel reader with bookshelf management")

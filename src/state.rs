@@ -27,7 +27,4 @@ pub enum BookmarkMode {
     /// 书签列表模式
     #[default]
     List,
-    /// 添加书签模式
-    #[allow(dead_code)]
-    Add,
 }

@@ -197,14 +197,6 @@ impl Bookmark {
             timestamp,
         }
     }
-
-    /// 格式化显示时间
-    #[allow(dead_code)]
-    pub fn format_time(&self) -> String {
-        let datetime = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(self.timestamp);
-        // 简单的时间格式化，实际项目中可能需要更复杂的格式化
-        format!("{:?}", datetime)
-    }
 }
 
 /// 阅读进度跟踪结构
@@ -237,32 +229,6 @@ impl ReadingProgress {
         } else {
             None
         }
-    }
-
-    /// 根据名称查找书签
-    /// # 参数
-    /// - `name`: 书签名称
-    /// # 返回
-    /// 返回书签的索引，如果未找到则返回None
-    #[allow(dead_code)]
-    pub fn find_bookmark_by_name(&self, name: &str) -> Option<usize> {
-        self.bookmarks.iter().position(|b| b.name == name)
-    }
-
-    /// 获取指定位置附近的书签
-    /// # 参数
-    /// - `position`: 当前位置
-    /// - `range`: 搜索范围
-    /// # 返回
-    /// 返回范围内的书签索引列表
-    #[allow(dead_code)]
-    pub fn get_bookmarks_near_position(&self, position: usize, range: usize) -> Vec<usize> {
-        self.bookmarks
-            .iter()
-            .enumerate()
-            .filter(|(_, bookmark)| bookmark.position.abs_diff(position) <= range)
-            .map(|(index, _)| index)
-            .collect()
     }
 }
 
