@@ -34,17 +34,35 @@ pub fn render_reader(f: &mut Frame, app: &App) {
         f.render_widget(content, content_area);
 
         // 创建帮助信息（贴近底部）
-        let progress_text = format!("进度: {}/{} 行", start_line + 1, lines.len());
+        let progress_text = format!("{}/{}", start_line + 1, lines.len());
         let bookmark_count = novel.progress.bookmarks.len();
         let bookmark_info = if bookmark_count > 0 {
-            format!(" | 书签: {}个", bookmark_count)
+            format!(" 签:{}", bookmark_count)
         } else {
             String::new()
         };
-        let help_text = format!(
-            "{}{} | ↑/k: 上滚  ↓/j: 下滚  ←/h: 上页  →/l: 下页  /: 搜索  t: 章节  b: 书签  m: 添加书签  Esc: 返回  q: 退出",
-            progress_text, bookmark_info
-        );
+
+        // 根据终端宽度自适应帮助信息
+        let width = area.width as usize;
+        let help_text = if width >= 100 {
+            // 宽屏：完整信息
+            format!(
+                "{}行{} │ jk:滚动 hl:翻页 /:搜索 t:目录 b:书签 m:标记 Esc:返回 q:退出",
+                progress_text, bookmark_info
+            )
+        } else if width >= 70 {
+            // 中等：省略部分
+            format!(
+                "{}行{} │ jk:滚动 hl:翻页 /:搜 t:目录 b:签 m:标 q:退",
+                progress_text, bookmark_info
+            )
+        } else if width >= 50 {
+            // 窄屏：最常用
+            format!("{}行 │ jk:滚 hl:翻 /:搜 t:目录 q:退", progress_text)
+        } else {
+            // 极窄：仅进度
+            format!("{}行", progress_text)
+        };
         render_help_info(f, &help_text, area);
     }
 }
