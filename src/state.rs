@@ -20,11 +20,3 @@ pub enum SettingsMode {
     /// 删除孤立记录模式
     DeleteOrphaned,
 }
-
-/// 书签管理模式
-#[derive(Clone, PartialEq, Debug, Default)]
-pub enum BookmarkMode {
-    /// 书签列表模式
-    #[default]
-    List,
-}

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::model::library::{Library, NovelInfo};
 use crate::model::novel::Novel;
-use crate::state::{AppState, BookmarkMode, SettingsMode};
+use crate::state::{AppState, SettingsMode};
 
 /// 搜索相关状态
 #[derive(Default)]
@@ -28,9 +28,6 @@ impl SearchState {
 /// 书签相关状态
 #[derive(Default)]
 pub struct BookmarkState {
-    /// 书签管理模式
-    #[allow(dead_code)]
-    pub mode: BookmarkMode,
     /// 当前选中的书签索引
     pub selected_index: Option<usize>,
     /// 添加书签时的输入内容
