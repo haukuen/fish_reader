@@ -34,7 +34,13 @@ pub fn render_reader(f: &mut Frame, app: &App) {
         f.render_widget(content, content_area);
 
         // 创建帮助信息（贴近底部）
-        let progress_text = format!("{}/{}", start_line + 1, lines.len());
+        let total_lines = lines.len();
+        let percent = if total_lines > 0 {
+            ((start_line + 1) * 100) / total_lines
+        } else {
+            0
+        };
+        let progress_text = format!("{}/{}({}%)", start_line + 1, total_lines, percent);
         let bookmark_count = novel.progress.bookmarks.len();
         let bookmark_info = if bookmark_count > 0 {
             format!(" 签:{}", bookmark_count)
