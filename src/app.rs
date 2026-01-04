@@ -410,4 +410,117 @@ mod tests {
         };
         assert_eq!(app.find_current_chapter_index(), Some(2));
     }
+
+    #[test]
+    fn test_add_bookmark() {
+        let mut app = create_test_app();
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.progress.scroll_offset = 50;
+        app.current_novel = Some(novel);
+
+        app.add_bookmark("My Bookmark".to_string());
+
+        let bookmarks = app.get_current_bookmarks().unwrap();
+        assert_eq!(bookmarks.len(), 1);
+        assert_eq!(bookmarks[0].name, "My Bookmark");
+        assert_eq!(bookmarks[0].position, 50);
+    }
+
+    #[test]
+    fn test_remove_bookmark() {
+        let mut app = create_test_app();
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.progress.add_bookmark("Test".to_string(), 10);
+        app.current_novel = Some(novel);
+
+        let result = app.remove_bookmark(0);
+        assert!(result.is_some());
+        assert!(app.get_current_bookmarks().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_remove_bookmark_no_novel() {
+        let mut app = create_test_app();
+        let result = app.remove_bookmark(0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_jump_to_bookmark() {
+        let mut app = create_test_app();
+        let mut novel = Novel::new(PathBuf::from("test.txt"));
+        novel.progress.add_bookmark("Target".to_string(), 100);
+        app.current_novel = Some(novel);
+
+        let result = app.jump_to_bookmark(0);
+        assert!(result.is_some());
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            100
+        );
+    }
+
+    #[test]
+    fn test_jump_to_bookmark_invalid_index() {
+        let mut app = create_test_app();
+        let novel = Novel::new(PathBuf::from("test.txt"));
+        app.current_novel = Some(novel);
+
+        let result = app.jump_to_bookmark(99);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_get_current_bookmarks_no_novel() {
+        let app = create_test_app();
+        assert!(app.get_current_bookmarks().is_none());
+    }
+
+    #[test]
+    fn test_clear_bookmark_inputs() {
+        let mut app = create_test_app();
+        app.bookmark.input = "some input".to_string();
+        app.clear_bookmark_inputs();
+        assert!(app.bookmark.input.is_empty());
+    }
+
+    #[test]
+    fn test_search_state_clear() {
+        let mut search = SearchState::default();
+        search.input = "query".to_string();
+        search.results = vec![(1, "result".to_string())];
+        search.selected_index = Some(0);
+
+        search.clear();
+
+        assert!(search.input.is_empty());
+        assert!(search.results.is_empty());
+        assert!(search.selected_index.is_none());
+    }
+
+    #[test]
+    fn test_settings_state_reset() {
+        let mut settings = SettingsState::default();
+        settings.mode = SettingsMode::DeleteNovel;
+        settings.selected_option = Some(5);
+
+        settings.reset();
+
+        assert_eq!(settings.mode, SettingsMode::MainMenu);
+        assert!(settings.selected_option.is_none());
+    }
+
+    #[test]
+    fn test_find_current_chapter_index_no_novel() {
+        let app = create_test_app();
+        assert!(app.find_current_chapter_index().is_none());
+    }
+
+    #[test]
+    fn test_find_current_chapter_index_no_chapters() {
+        let mut app = create_test_app();
+        let novel = Novel::new(PathBuf::from("test.txt"));
+        app.current_novel = Some(novel);
+        assert!(app.find_current_chapter_index().is_none());
+    }
 }

@@ -297,4 +297,71 @@ Final content"
             }
         );
     }
+
+    #[test]
+    fn test_reading_progress_add_bookmark() {
+        let mut progress = ReadingProgress::default();
+        progress.add_bookmark("Test Bookmark".to_string(), 100);
+
+        assert_eq!(progress.bookmarks.len(), 1);
+        assert_eq!(progress.bookmarks[0].name, "Test Bookmark");
+        assert_eq!(progress.bookmarks[0].position, 100);
+    }
+
+    #[test]
+    fn test_reading_progress_add_bookmarks_sorted() {
+        let mut progress = ReadingProgress::default();
+        progress.add_bookmark("Second".to_string(), 200);
+        progress.add_bookmark("First".to_string(), 100);
+        progress.add_bookmark("Third".to_string(), 300);
+
+        // 应按位置排序
+        assert_eq!(progress.bookmarks.len(), 3);
+        assert_eq!(progress.bookmarks[0].position, 100);
+        assert_eq!(progress.bookmarks[0].name, "First");
+        assert_eq!(progress.bookmarks[1].position, 200);
+        assert_eq!(progress.bookmarks[1].name, "Second");
+        assert_eq!(progress.bookmarks[2].position, 300);
+        assert_eq!(progress.bookmarks[2].name, "Third");
+    }
+
+    #[test]
+    fn test_reading_progress_remove_bookmark() {
+        let mut progress = ReadingProgress::default();
+        progress.add_bookmark("Test".to_string(), 100);
+
+        let removed = progress.remove_bookmark(0);
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().name, "Test");
+        assert!(progress.bookmarks.is_empty());
+    }
+
+    #[test]
+    fn test_reading_progress_remove_bookmark_invalid_index() {
+        let mut progress = ReadingProgress::default();
+        let removed = progress.remove_bookmark(99);
+        assert!(removed.is_none());
+    }
+
+    #[test]
+    fn test_bookmark_new() {
+        let bookmark = Bookmark::new("Test".to_string(), 42);
+        assert_eq!(bookmark.name, "Test");
+        assert_eq!(bookmark.position, 42);
+        assert!(bookmark.timestamp > 0);
+    }
+
+    #[test]
+    fn test_is_chapter_title_edge_cases() {
+        let novel = Novel::new(PathBuf::from("test.txt"));
+
+        // 边界情况
+        assert!(!novel.is_chapter_title(""));
+        assert!(!novel.is_chapter_title("   "));
+        assert!(!novel.is_chapter_title("第"));
+        assert!(novel.is_chapter_title("后记"));
+        assert!(novel.is_chapter_title("番外"));
+        assert!(novel.is_chapter_title("楔子"));
+        assert!(novel.is_chapter_title("尾声"));
+    }
 }

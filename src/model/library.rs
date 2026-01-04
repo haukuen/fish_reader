@@ -111,4 +111,36 @@ mod tests {
         assert_eq!(library.get_novel_progress(&novel_path), new_progress);
         assert_eq!(library.novels.len(), 1);
     }
+
+    #[test]
+    fn test_library_new() {
+        let library = Library::new();
+        assert!(library.novels.is_empty());
+    }
+
+    #[test]
+    fn test_update_novel_progress_creates_new_entry() {
+        let mut library = Library::new();
+        let path = PathBuf::from("/test/novel.txt");
+        let progress = ReadingProgress {
+            scroll_offset: 50,
+            bookmarks: Vec::new(),
+        };
+
+        library.update_novel_progress(&path, progress.clone());
+
+        assert_eq!(library.novels.len(), 1);
+        assert_eq!(library.novels[0].title, "novel");
+        assert_eq!(library.novels[0].progress, progress);
+    }
+
+    #[test]
+    fn test_get_novel_progress_not_found() {
+        let library = Library::new();
+        let path = PathBuf::from("/nonexistent/novel.txt");
+
+        let progress = library.get_novel_progress(&path);
+
+        assert_eq!(progress, ReadingProgress::default());
+    }
 }

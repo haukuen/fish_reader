@@ -609,3 +609,48 @@ fn handle_delete_orphaned_key(app: &mut App, key: KeyCode) {
         _ => {}
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_count_physical_lines_empty() {
+        // 空字符串应返回1行
+        assert_eq!(count_physical_lines("", 80), 1);
+    }
+
+    #[test]
+    fn test_count_physical_lines_zero_width() {
+        // 零宽度应返回1行（避免除零错误）
+        assert_eq!(count_physical_lines("hello", 0), 1);
+    }
+
+    #[test]
+    fn test_count_physical_lines_single_line() {
+        // 短字符串在宽屏幕上只占1行
+        assert_eq!(count_physical_lines("hello", 80), 1);
+    }
+
+    #[test]
+    fn test_count_physical_lines_wrap() {
+        // 10个字符，宽度为4，需要3行 (4+4+2)
+        assert_eq!(count_physical_lines("1234567890", 4), 3);
+        // 8个字符，宽度为4，需要2行
+        assert_eq!(count_physical_lines("12345678", 4), 2);
+    }
+
+    #[test]
+    fn test_count_physical_lines_chinese() {
+        // 中文字符宽度为2，"你好" = 4宽度
+        assert_eq!(count_physical_lines("你好", 4), 1);
+        assert_eq!(count_physical_lines("你好", 3), 2); // 4宽度在3列需要2行
+        assert_eq!(count_physical_lines("你好世界", 4), 2); // 8宽度在4列需要2行
+    }
+
+    #[test]
+    fn test_count_physical_lines_exact_fit() {
+        assert_eq!(count_physical_lines("1234", 4), 1);
+        assert_eq!(count_physical_lines("12345", 5), 1);
+    }
+}
