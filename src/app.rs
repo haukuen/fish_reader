@@ -177,9 +177,11 @@ impl App {
                 // 更新选中索引，确保不越界
                 if !self.search.results.is_empty() {
                     // 如果之前没有选中或选中索引越界，则选中第一个
-                    if self.search.selected_index.is_none()
-                        || self.search.selected_index.unwrap() >= self.search.results.len()
-                    {
+                    let should_reset = match self.search.selected_index {
+                        None => true,
+                        Some(idx) => idx >= self.search.results.len(),
+                    };
+                    if should_reset {
                         self.search.selected_index = Some(0);
                     }
                 } else {

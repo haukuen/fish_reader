@@ -64,13 +64,11 @@ fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
             if let Some(bookmarks) = app.get_current_bookmarks()
                 && !bookmarks.is_empty()
             {
-                if app.bookmark.selected_index.is_none() {
-                    app.bookmark.selected_index = Some(0);
-                } else {
-                    let current = app.bookmark.selected_index.unwrap();
-                    let next = (current + 1) % bookmarks.len();
-                    app.bookmark.selected_index = Some(next);
-                }
+                let next = match app.bookmark.selected_index {
+                    None => 0,
+                    Some(current) => (current + 1) % bookmarks.len(),
+                };
+                app.bookmark.selected_index = Some(next);
             }
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
@@ -174,13 +172,11 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
         KeyCode::Down | KeyCode::Char('j') => {
             if !app.novels.is_empty() {
                 // 如果当前没有选中任何小说，则选中第一本
-                if app.selected_novel_index.is_none() {
-                    app.selected_novel_index = Some(0);
-                } else {
-                    let current = app.selected_novel_index.unwrap();
-                    let next = (current + 1) % app.novels.len();
-                    app.selected_novel_index = Some(next);
-                }
+                let next = match app.selected_novel_index {
+                    None => 0,
+                    Some(current) => (current + 1) % app.novels.len(),
+                };
+                app.selected_novel_index = Some(next);
             }
         }
         KeyCode::Enter => {
@@ -362,13 +358,11 @@ fn handle_search_key(app: &mut App, key: KeyCode) {
         }
         KeyCode::Down => {
             if !app.search.results.is_empty() {
-                if app.search.selected_index.is_none() {
-                    app.search.selected_index = Some(0);
-                } else {
-                    let current = app.search.selected_index.unwrap();
-                    let next = (current + 1) % app.search.results.len();
-                    app.search.selected_index = Some(next);
-                }
+                let next = match app.search.selected_index {
+                    None => 0,
+                    Some(current) => (current + 1) % app.search.results.len(),
+                };
+                app.search.selected_index = Some(next);
             }
         }
         KeyCode::Backspace => {
@@ -428,13 +422,11 @@ fn handle_chapter_list_key(app: &mut App, key: KeyCode) {
             if let Some(novel) = &app.current_novel
                 && !novel.chapters.is_empty()
             {
-                if app.selected_chapter_index.is_none() {
-                    app.selected_chapter_index = Some(0);
-                } else {
-                    let current = app.selected_chapter_index.unwrap();
-                    let next = (current + 1) % novel.chapters.len();
-                    app.selected_chapter_index = Some(next);
-                }
+                let next = match app.selected_chapter_index {
+                    None => 0,
+                    Some(current) => (current + 1) % novel.chapters.len(),
+                };
+                app.selected_chapter_index = Some(next);
             }
         }
         _ => {}
@@ -481,13 +473,11 @@ fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
         KeyCode::Down | KeyCode::Char('j') => {
             let menu_count = 2; // 删除小说、清理孤立记录
             if menu_count > 0 {
-                if app.settings.selected_option.is_none() {
-                    app.settings.selected_option = Some(0);
-                } else {
-                    let current = app.settings.selected_option.unwrap();
-                    let next = (current + 1) % menu_count;
-                    app.settings.selected_option = Some(next);
-                }
+                let next = match app.settings.selected_option {
+                    None => 0,
+                    Some(current) => (current + 1) % menu_count,
+                };
+                app.settings.selected_option = Some(next);
             }
         }
         KeyCode::Enter => {
@@ -537,13 +527,11 @@ fn handle_delete_novel_key(app: &mut App, key: KeyCode) {
         }
         KeyCode::Down | KeyCode::Char('j') => {
             if !app.novels.is_empty() {
-                if app.settings.selected_delete_novel_index.is_none() {
-                    app.settings.selected_delete_novel_index = Some(0);
-                } else {
-                    let current = app.settings.selected_delete_novel_index.unwrap();
-                    let next = (current + 1) % app.novels.len();
-                    app.settings.selected_delete_novel_index = Some(next);
-                }
+                let next = match app.settings.selected_delete_novel_index {
+                    None => 0,
+                    Some(current) => (current + 1) % app.novels.len(),
+                };
+                app.settings.selected_delete_novel_index = Some(next);
             }
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
@@ -580,13 +568,11 @@ fn handle_delete_orphaned_key(app: &mut App, key: KeyCode) {
         }
         KeyCode::Down | KeyCode::Char('j') => {
             if !app.settings.orphaned_novels.is_empty() {
-                if app.settings.selected_orphaned_index.is_none() {
-                    app.settings.selected_orphaned_index = Some(0);
-                } else {
-                    let current = app.settings.selected_orphaned_index.unwrap();
-                    let next = (current + 1) % app.settings.orphaned_novels.len();
-                    app.settings.selected_orphaned_index = Some(next);
-                }
+                let next = match app.settings.selected_orphaned_index {
+                    None => 0,
+                    Some(current) => (current + 1) % app.settings.orphaned_novels.len(),
+                };
+                app.settings.selected_orphaned_index = Some(next);
             }
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
