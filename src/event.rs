@@ -185,9 +185,11 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
             {
                 let mut novel = app.novels[index].clone();
 
-                // 懒加载：如果内容为空，加载文件内容
-                if novel.content.is_empty() {
-                    let _ = novel.load_content();
+                if novel.content.is_empty()
+                    && let Err(e) = novel.load_content()
+                {
+                    app.set_error(format!("Failed to load novel: {}", e));
+                    return;
                 }
 
                 // 恢复阅读进度
@@ -225,17 +227,19 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
 
         match key {
             KeyCode::Char('q') | KeyCode::Char('Q') => {
-                // 保存进度
                 app.library
                     .update_novel_progress(&novel.path, novel.progress.clone());
-                let _ = app.library.save();
+                if let Err(e) = app.library.save() {
+                    app.set_error(format!("Failed to save progress: {}", e));
+                }
                 app.should_quit = true;
             }
             KeyCode::Esc => {
-                // 保存阅读进度并返回书架
                 app.library
                     .update_novel_progress(&novel.path, novel.progress.clone());
-                let _ = app.library.save();
+                if let Err(e) = app.library.save() {
+                    app.set_error(format!("Failed to save progress: {}", e));
+                }
                 app.state = AppState::Bookshelf;
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -330,19 +334,19 @@ fn handle_search_key(app: &mut App, key: KeyCode) {
             app.state = app.previous_state.clone();
         }
         KeyCode::Enter => {
-            if let Some(index) = app.search.selected_index {
-                // 跳转到选中的搜索结果
-                if index < app.search.results.len() {
-                    let (line_num, _) = app.search.results[index];
-                    if let Some(novel) = &mut app.current_novel {
-                        novel.progress.scroll_offset = line_num;
-                        // 保存进度
-                        app.library
-                            .update_novel_progress(&novel.path, novel.progress.clone());
-                        let _ = app.library.save();
+            if let Some(index) = app.search.selected_index
+                && index < app.search.results.len()
+            {
+                let (line_num, _) = app.search.results[index];
+                if let Some(novel) = &mut app.current_novel {
+                    novel.progress.scroll_offset = line_num;
+                    app.library
+                        .update_novel_progress(&novel.path, novel.progress.clone());
+                    if let Err(e) = app.library.save() {
+                        app.set_error(format!("Failed to save progress: {}", e));
                     }
-                    app.state = AppState::Reading;
                 }
+                app.state = AppState::Reading;
             }
         }
         KeyCode::Up => {
@@ -395,13 +399,13 @@ fn handle_chapter_list_key(app: &mut App, key: KeyCode) {
                 && let Some(novel) = &mut app.current_novel
                 && index < novel.chapters.len()
             {
-                // 跳转到选中的章节
                 let chapter = &novel.chapters[index];
                 novel.progress.scroll_offset = chapter.start_line;
-                // 保存进度
                 app.library
                     .update_novel_progress(&novel.path, novel.progress.clone());
-                let _ = app.library.save();
+                if let Err(e) = app.library.save() {
+                    app.set_error(format!("Failed to save progress: {}", e));
+                }
                 app.state = AppState::Reading;
             }
         }
@@ -535,11 +539,11 @@ fn handle_delete_novel_key(app: &mut App, key: KeyCode) {
             }
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
-            // 删除选中的小说
             if let Some(index) = app.settings.selected_delete_novel_index
                 && index < app.novels.len()
+                && let Err(e) = app.delete_novel(index)
             {
-                let _ = app.delete_novel(index);
+                app.set_error(format!("Failed to delete novel: {}", e));
             }
         }
         _ => {}
@@ -576,16 +580,16 @@ fn handle_delete_orphaned_key(app: &mut App, key: KeyCode) {
             }
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
-            // 删除选中的孤立记录
             if let Some(index) = app.settings.selected_orphaned_index
                 && index < app.settings.orphaned_novels.len()
             {
                 let orphaned_novel = &app.settings.orphaned_novels[index];
                 app.library.novels.retain(|n| n.path != orphaned_novel.path);
-                let _ = app.library.save();
+                if let Err(e) = app.library.save() {
+                    app.set_error(format!("Failed to save: {}", e));
+                }
                 app.detect_orphaned_novels();
 
-                // 调整选中索引
                 if !app.settings.orphaned_novels.is_empty() {
                     let new_index = index.min(app.settings.orphaned_novels.len() - 1);
                     app.settings.selected_orphaned_index = Some(new_index);

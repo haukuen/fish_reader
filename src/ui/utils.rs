@@ -1,4 +1,5 @@
 use ratatui::prelude::*;
+use ratatui::style::Modifier;
 use ratatui::widgets::*;
 
 use crate::app::App;
@@ -6,12 +7,6 @@ use crate::state::AppState;
 
 use super::{bookmark, bookshelf, chapter_list, reader, search, settings};
 
-/// 渲染帮助信息的通用函数
-///
-/// # 参数
-/// * `f` - 渲染框架
-/// * `help_text` - 帮助文本内容
-/// * `area` - 渲染区域
 pub fn render_help_info(f: &mut Frame, help_text: &str, area: Rect) {
     let help = Paragraph::new(help_text)
         .style(Style::default().fg(Color::Gray))
@@ -27,11 +22,22 @@ pub fn render_help_info(f: &mut Frame, help_text: &str, area: Rect) {
     f.render_widget(help, help_area);
 }
 
+pub fn render_error_message(f: &mut Frame, error_msg: &str, area: Rect) {
+    let error = Paragraph::new(format!("⚠ {}", error_msg))
+        .style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+        .alignment(Alignment::Center);
+
+    let error_area = Rect {
+        x: area.x,
+        y: area.height.saturating_sub(2),
+        width: area.width,
+        height: 1,
+    };
+
+    f.render_widget(error, error_area);
+}
+
 /// UI渲染函数
-///
-/// # 参数
-/// * `f` - 渲染框架
-/// * `app` - 应用状态
 pub fn render(f: &mut Frame, app: &App) {
     match app.state {
         AppState::Bookshelf => bookshelf::render_bookshelf(f, app),
@@ -40,5 +46,9 @@ pub fn render(f: &mut Frame, app: &App) {
         AppState::ChapterList => chapter_list::render_chapter_list(f, app),
         AppState::Settings => settings::render_settings(f, app),
         AppState::BookmarkList | AppState::BookmarkAdd => bookmark::render_bookmark(f, app),
+    }
+
+    if let Some(ref error_msg) = app.error_message {
+        render_error_message(f, error_msg, f.area());
     }
 }

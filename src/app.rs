@@ -88,6 +88,8 @@ pub struct App {
     pub bookmark: BookmarkState,
     /// 设置状态
     pub settings: SettingsState,
+    /// 错误消息（用于在状态栏显示错误提示）
+    pub error_message: Option<String>,
 }
 
 impl App {
@@ -115,6 +117,7 @@ impl App {
             search: SearchState::default(),
             bookmark: BookmarkState::default(),
             settings: SettingsState::default(),
+            error_message: None,
         };
 
         // 检测孤立的小说记录
@@ -128,8 +131,10 @@ impl App {
         path.push(".fish_reader");
         path.push("novels");
 
-        if !path.exists() {
-            let _ = std::fs::create_dir_all(&path);
+        if !path.exists()
+            && let Err(e) = std::fs::create_dir_all(&path)
+        {
+            eprintln!("Failed to create directory: {}", e);
         }
 
         path
@@ -280,10 +285,11 @@ impl App {
             let position = novel.progress.scroll_offset;
             novel.progress.add_bookmark(name, position);
 
-            // 更新library中的进度
             self.library
                 .update_novel_progress(&novel.path, novel.progress.clone());
-            let _ = self.library.save();
+            if let Err(e) = self.library.save() {
+                self.set_error(format!("Failed to save bookmark: {}", e));
+            }
         }
     }
 
@@ -294,10 +300,11 @@ impl App {
         if let Some(novel) = &mut self.current_novel
             && novel.progress.remove_bookmark(index).is_some()
         {
-            // 更新library中的进度
             self.library
                 .update_novel_progress(&novel.path, novel.progress.clone());
-            let _ = self.library.save();
+            if let Err(e) = self.library.save() {
+                self.set_error(format!("Failed to save: {}", e));
+            }
             return Some(());
         }
         None
@@ -311,10 +318,11 @@ impl App {
             && let Some(bookmark) = novel.progress.bookmarks.get(index)
         {
             novel.progress.scroll_offset = bookmark.position;
-            // 更新library中的进度
             self.library
                 .update_novel_progress(&novel.path, novel.progress.clone());
-            let _ = self.library.save();
+            if let Err(e) = self.library.save() {
+                self.set_error(format!("Failed to save progress: {}", e));
+            }
             return Some(());
         }
         None
@@ -330,6 +338,17 @@ impl App {
     /// 清空书签输入框
     pub fn clear_bookmark_inputs(&mut self) {
         self.bookmark.clear_input();
+    }
+
+    /// 设置错误消息，将在下一帧显示给用户
+    pub fn set_error(&mut self, msg: impl Into<String>) {
+        self.error_message = Some(msg.into());
+    }
+
+    /// 清除错误消息
+    #[allow(dead_code)]
+    pub fn clear_error(&mut self) {
+        self.error_message = None;
     }
 }
 
@@ -353,6 +372,7 @@ mod tests {
             search: SearchState::default(),
             bookmark: BookmarkState::default(),
             settings: SettingsState::default(),
+            error_message: None,
         }
     }
 

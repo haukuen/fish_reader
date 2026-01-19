@@ -76,7 +76,9 @@ fn run(app: &mut App) -> Result<()> {
         app.library
             .update_novel_progress(&novel.path, novel.progress.clone());
     }
-    let _ = app.library.save();
+    if let Err(e) = app.library.save() {
+        eprintln!("Failed to save progress: {}", e);
+    }
 
     // 恢复终端
     disable_raw_mode()?;

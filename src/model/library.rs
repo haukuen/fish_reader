@@ -49,8 +49,10 @@ impl Library {
         let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         path.push(".fish_reader");
 
-        if !path.exists() {
-            let _ = std::fs::create_dir_all(&path);
+        if !path.exists()
+            && let Err(e) = std::fs::create_dir_all(&path)
+        {
+            eprintln!("Failed to create directory: {}", e);
         }
 
         path.push("progress.json");
