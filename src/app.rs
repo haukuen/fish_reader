@@ -380,7 +380,8 @@ mod tests {
     fn test_perform_search() {
         let mut app = create_test_app();
         let mut novel = Novel::new(PathBuf::from("test.txt"));
-        novel.content = "Hello world\nThis is a test\nAnother TEST line".to_string();
+        novel.content =
+            std::sync::Arc::new("Hello world\nThis is a test\nAnother TEST line".to_string());
         app.current_novel = Some(novel);
 
         app.search.input = "test".to_string();

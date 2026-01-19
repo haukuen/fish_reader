@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -8,12 +9,32 @@ pub struct Novel {
     pub title: String,
     /// 小说文件的绝对路径
     pub path: PathBuf,
-    /// 小说文本内容
-    pub content: String,
+    /// 小说文本内容（使用 Arc 共享所有权，避免克隆时复制大型字符串）
+    #[serde(
+        serialize_with = "serialize_arc_string",
+        deserialize_with = "deserialize_arc_string"
+    )]
+    pub content: Arc<String>,
     /// 当前阅读进度
     pub progress: ReadingProgress,
     /// 章节目录
     pub chapters: Vec<Chapter>,
+}
+
+// 自定义序列化函数：将 Arc<String> 序列化为普通字符串
+fn serialize_arc_string<S>(arc: &Arc<String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(arc.as_ref())
+}
+
+// 自定义反序列化函数：将字符串反序列化为 Arc<String>
+fn deserialize_arc_string<'de, D>(deserializer: D) -> Result<Arc<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    String::deserialize(deserializer).map(Arc::new)
 }
 
 impl Novel {
@@ -32,14 +53,15 @@ impl Novel {
         Novel {
             title,
             path: path.clone(),
-            content: String::new(),
+            content: Arc::new(String::new()),
             progress: ReadingProgress::default(),
             chapters: Vec::new(),
         }
     }
 
     pub fn load_content(&mut self) -> std::io::Result<()> {
-        self.content = std::fs::read_to_string(&self.path)?;
+        let content = std::fs::read_to_string(&self.path)?;
+        self.content = Arc::new(content);
         self.parse_chapters();
         Ok(())
     }
@@ -264,14 +286,16 @@ mod tests {
     #[test]
     fn test_parse_chapters() {
         let mut novel = Novel::new(PathBuf::from("test.txt"));
-        novel.content = "序章
+        novel.content = Arc::new(
+            "序章
 Some content
 
 第一章 The Real Start
 More content
 Chapter 2
 Final content"
-            .to_string();
+                .to_string(),
+        );
         novel.parse_chapters();
 
         assert_eq!(novel.chapters.len(), 3);
