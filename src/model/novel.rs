@@ -224,9 +224,9 @@ impl Bookmark {
 /// 阅读进度跟踪结构
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ReadingProgress {
-    /// 滚动偏移量（用于界面渲染）
+    #[serde(default)]
     pub scroll_offset: usize,
-    /// 书签列表
+    #[serde(default)]
     pub bookmarks: Vec<Bookmark>,
 }
 
