@@ -317,6 +317,52 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
                 app.state = AppState::BookmarkAdd;
                 app.clear_bookmark_inputs();
             }
+            KeyCode::Char('[') => {
+                // 跳转到上一章
+                if !novel.chapters.is_empty() {
+                    let current_line = novel.progress.scroll_offset;
+                    let mut current_idx = 0;
+                    for (index, chapter) in novel.chapters.iter().enumerate() {
+                        if chapter.start_line <= current_line {
+                            current_idx = index;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if current_idx > 0 {
+                        novel.progress.scroll_offset = novel.chapters[current_idx - 1].start_line;
+                        app.library
+                            .update_novel_progress(&novel.path, novel.progress.clone());
+                        if let Err(e) = app.library.save() {
+                            app.set_error(format!("Failed to save progress: {}", e));
+                        }
+                    }
+                }
+            }
+            KeyCode::Char(']') => {
+                // 跳转到下一章
+                if !novel.chapters.is_empty() {
+                    let current_line = novel.progress.scroll_offset;
+                    let mut current_idx = 0;
+                    for (index, chapter) in novel.chapters.iter().enumerate() {
+                        if chapter.start_line <= current_line {
+                            current_idx = index;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if current_idx + 1 < novel.chapters.len() {
+                        novel.progress.scroll_offset = novel.chapters[current_idx + 1].start_line;
+                        app.library
+                            .update_novel_progress(&novel.path, novel.progress.clone());
+                        if let Err(e) = app.library.save() {
+                            app.set_error(format!("Failed to save progress: {}", e));
+                        }
+                    }
+                }
+            }
             _ => {}
         }
     }
