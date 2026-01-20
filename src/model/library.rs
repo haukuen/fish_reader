@@ -81,17 +81,29 @@ impl Library {
     }
 
     pub fn get_progress_path() -> PathBuf {
-        let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        path.push(".fish_reader");
-
-        if !path.exists()
-            && let Err(e) = std::fs::create_dir_all(&path)
+        #[cfg(test)]
         {
-            eprintln!("Failed to create directory: {}", e);
+            let mut path = std::env::temp_dir();
+            path.push("fish_reader_test");
+            let _ = std::fs::create_dir_all(&path);
+            path.push("progress.json");
+            return path;
         }
 
-        path.push("progress.json");
-        path
+        #[cfg(not(test))]
+        {
+            let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+            path.push(".fish_reader");
+
+            if !path.exists()
+                && let Err(e) = std::fs::create_dir_all(&path)
+            {
+                eprintln!("Failed to create directory: {}", e);
+            }
+
+            path.push("progress.json");
+            path
+        }
     }
 
     fn create_backup_if_needed(progress_path: &Path) -> std::io::Result<()> {

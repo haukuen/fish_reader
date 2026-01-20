@@ -127,20 +127,32 @@ impl App {
     }
 
     pub fn get_novels_dir() -> PathBuf {
-        let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-        path.push(".fish_reader");
-        path.push("novels");
-
-        if !path.exists()
-            && let Err(e) = std::fs::create_dir_all(&path)
+        #[cfg(test)]
         {
-            eprintln!("Failed to create directory: {}", e);
+            let mut path = std::env::temp_dir();
+            path.push("fish_reader_test");
+            path.push("novels");
+            let _ = std::fs::create_dir_all(&path);
+            return path;
         }
 
-        path
+        #[cfg(not(test))]
+        {
+            let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+            path.push(".fish_reader");
+            path.push("novels");
+
+            if !path.exists()
+                && let Err(e) = std::fs::create_dir_all(&path)
+            {
+                eprintln!("Failed to create directory: {}", e);
+            }
+
+            path
+        }
     }
 
-    /// 从目录加载小说列表（懒加载，不加载文件内容）
+    /// 从目录加载小说列表
     fn load_novels_from_dir(dir: &Path) -> Result<Vec<Novel>> {
         let mut novels = Vec::new();
 
