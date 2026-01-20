@@ -27,9 +27,30 @@ impl Library {
             match std::fs::read_to_string(&progress_path) {
                 Ok(content) => match serde_json::from_str(&content) {
                     Ok(library) => return library,
-                    Err(_) => return Self::new(),
+                    Err(e) => {
+                        eprintln!("Failed to parse progress.json: {}", e);
+
+                        let timestamp = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs();
+
+                        let corrupted_path =
+                            progress_path.with_extension(format!("json.corrupted.{}", timestamp));
+
+                        if let Err(backup_err) = std::fs::copy(&progress_path, &corrupted_path) {
+                            eprintln!("Failed to backup corrupted file: {}", backup_err);
+                        } else {
+                            eprintln!("Corrupted file backed up to: {:?}", corrupted_path);
+                        }
+
+                        return Self::new();
+                    }
                 },
-                Err(_) => return Self::new(),
+                Err(e) => {
+                    eprintln!("Failed to read progress.json: {}", e);
+                    return Self::new();
+                }
             }
         }
         Self::new()
@@ -41,7 +62,21 @@ impl Library {
     pub fn save(&self) -> std::io::Result<()> {
         let progress_path = Self::get_progress_path();
         let content = serde_json::to_string_pretty(self)?;
-        std::fs::write(progress_path, content)?;
+
+        // 限制备份频率，忽略备份错误（不影响主流程）
+        let _ = Self::create_backup_if_needed(&progress_path);
+
+        // 原子写入：先写临时文件，再重命名
+        let temp_path = progress_path.with_extension("tmp");
+        std::fs::write(&temp_path, &content)?;
+
+        #[cfg(windows)]
+        if progress_path.exists() {
+            std::fs::remove_file(&progress_path)?;
+        }
+
+        std::fs::rename(&temp_path, &progress_path)?;
+
         Ok(())
     }
 
@@ -57,6 +92,56 @@ impl Library {
 
         path.push("progress.json");
         path
+    }
+
+    fn create_backup_if_needed(progress_path: &Path) -> std::io::Result<()> {
+        if !progress_path.exists() {
+            return Ok(());
+        }
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let period_timestamp = timestamp / 600 * 600;
+        let backup_path = progress_path.with_extension(format!("json.backup.{}", period_timestamp));
+
+        if backup_path.exists() {
+            return Ok(());
+        }
+
+        std::fs::copy(progress_path, &backup_path)?;
+
+        // 清理 3 天前的备份
+        let three_days_ago = timestamp.saturating_sub(3 * 24 * 60 * 60);
+        if let Some(backup_dir) = progress_path.parent() {
+            Self::cleanup_old_backups(backup_dir, three_days_ago);
+        }
+
+        Ok(())
+    }
+
+    fn cleanup_old_backups(backup_dir: &Path, cutoff_timestamp: u64) {
+        let Ok(entries) = std::fs::read_dir(backup_dir) else {
+            return;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+
+            // 从文件名解析时间戳: progress.json.backup.1234567890
+            if let Some(ts_str) = name.strip_prefix("progress.json.backup.") {
+                if let Ok(file_timestamp) = ts_str.parse::<u64>() {
+                    if file_timestamp < cutoff_timestamp {
+                        let _ = std::fs::remove_file(&path);
+                    }
+                }
+            }
+        }
     }
 
     pub fn update_novel_progress(&mut self, novel_path: &Path, progress: ReadingProgress) {
