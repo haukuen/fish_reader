@@ -2,6 +2,7 @@ use anyhow::Result;
 use ratatui::prelude::*;
 use std::path::{Path, PathBuf};
 
+use crate::config::CONFIG;
 use crate::model::library::{Library, NovelInfo};
 use crate::model::novel::Novel;
 use crate::state::{AppState, SettingsMode};
@@ -130,7 +131,7 @@ impl App {
         #[cfg(test)]
         {
             let mut path = std::env::temp_dir();
-            path.push("fish_reader_test");
+            path.push(format!("{}_test", CONFIG.dir_name));
             path.push("novels");
             let _ = std::fs::create_dir_all(&path);
             return path;
@@ -139,7 +140,7 @@ impl App {
         #[cfg(not(test))]
         {
             let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-            path.push(".fish_reader");
+            path.push(CONFIG.dir_name);
             path.push("novels");
 
             if !path.exists()
@@ -163,11 +164,13 @@ impl App {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
-            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("txt") {
-                // 懒加载：只创建 Novel 对象，不加载文件内容
-                let novel = Novel::new(path);
-                novels.push(novel);
-            }
+            if path.is_file()
+                && let Some(ext) = path.extension().and_then(|s| s.to_str())
+                    && CONFIG.supported_extensions.contains(&ext) {
+                        // 懒加载：只创建 Novel 对象，不加载文件内容
+                        let novel = Novel::new(path);
+                        novels.push(novel);
+                    }
         }
 
         Ok(novels)
@@ -217,27 +220,12 @@ impl App {
     /// # 返回
     /// 返回最接近当前阅读位置的章节索引，如果没有章节则返回None
     pub fn find_current_chapter_index(&self) -> Option<usize> {
-        if let Some(novel) = &self.current_novel {
+        self.current_novel.as_ref().and_then(|novel| {
             if novel.chapters.is_empty() {
                 return None;
             }
-
-            let current_line = novel.progress.scroll_offset;
-            let mut best_index = 0;
-
-            // 找到当前阅读位置之前的最后一个章节
-            for (index, chapter) in novel.chapters.iter().enumerate() {
-                if chapter.start_line <= current_line {
-                    best_index = index;
-                } else {
-                    break;
-                }
-            }
-
-            Some(best_index)
-        } else {
-            None
-        }
+            Some(Self::find_chapter_index(&novel.chapters, novel.progress.scroll_offset))
+        })
     }
 
     /// 检测孤立的小说记录（JSON中存在但文件已删除）
@@ -296,12 +284,7 @@ impl App {
         if let Some(novel) = &mut self.current_novel {
             let position = novel.progress.scroll_offset;
             novel.progress.add_bookmark(name, position);
-
-            self.library
-                .update_novel_progress(&novel.path, novel.progress.clone());
-            if let Err(e) = self.library.save() {
-                self.set_error(format!("Failed to save bookmark: {}", e));
-            }
+            self.save_current_progress();
         }
     }
 
@@ -312,14 +295,11 @@ impl App {
         if let Some(novel) = &mut self.current_novel
             && novel.progress.remove_bookmark(index).is_some()
         {
-            self.library
-                .update_novel_progress(&novel.path, novel.progress.clone());
-            if let Err(e) = self.library.save() {
-                self.set_error(format!("Failed to save: {}", e));
-            }
-            return Some(());
+            self.save_current_progress();
+            Some(())
+        } else {
+            None
         }
-        None
     }
 
     /// 跳转到指定书签位置
@@ -330,14 +310,11 @@ impl App {
             && let Some(bookmark) = novel.progress.bookmarks.get(index)
         {
             novel.progress.scroll_offset = bookmark.position;
-            self.library
-                .update_novel_progress(&novel.path, novel.progress.clone());
-            if let Err(e) = self.library.save() {
-                self.set_error(format!("Failed to save progress: {}", e));
-            }
-            return Some(());
+            self.save_current_progress();
+            Some(())
+        } else {
+            None
         }
-        None
     }
 
     /// 获取当前小说的书签列表
@@ -357,10 +334,38 @@ impl App {
         self.error_message = Some(msg.into());
     }
 
-    /// 清除错误消息
-    #[allow(dead_code)]
-    pub fn clear_error(&mut self) {
-        self.error_message = None;
+    /// 保存当前小说的阅读进度
+    /// # 功能
+    /// 更新并保存当前小说的进度，如果失败则设置错误消息
+    pub fn save_current_progress(&mut self) {
+        if let Some(novel) = &self.current_novel {
+            self.library
+                .update_novel_progress(&novel.path, novel.progress.clone());
+            if let Err(e) = self.library.save() {
+                self.set_error(format!("Failed to save progress: {}", e));
+            }
+        }
+    }
+
+    /// 查找当前行所在的章节索引
+    /// # 参数
+    /// - `chapters`: 章节列表
+    /// - `current_line`: 当前行号
+    /// # 返回
+    /// 最接近当前行的章节索引
+    pub fn find_chapter_index(
+        chapters: &[crate::model::novel::Chapter],
+        current_line: usize,
+    ) -> usize {
+        let mut current_idx = 0;
+        for (index, chapter) in chapters.iter().enumerate() {
+            if chapter.start_line <= current_line {
+                current_idx = index;
+            } else {
+                break;
+            }
+        }
+        current_idx
     }
 }
 

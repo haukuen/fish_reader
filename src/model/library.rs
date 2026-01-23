@@ -1,4 +1,5 @@
 use super::novel::ReadingProgress;
+use crate::config::CONFIG;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -84,16 +85,16 @@ impl Library {
         #[cfg(test)]
         {
             let mut path = std::env::temp_dir();
-            path.push("fish_reader_test");
+            path.push(format!("{}_test", CONFIG.dir_name));
             let _ = std::fs::create_dir_all(&path);
-            path.push("progress.json");
+            path.push(CONFIG.progress_filename);
             return path;
         }
 
         #[cfg(not(test))]
         {
             let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-            path.push(".fish_reader");
+            path.push(CONFIG.dir_name);
 
             if !path.exists()
                 && let Err(e) = std::fs::create_dir_all(&path)
@@ -101,7 +102,7 @@ impl Library {
                 eprintln!("Failed to create directory: {}", e);
             }
 
-            path.push("progress.json");
+            path.push(CONFIG.progress_filename);
             path
         }
     }
@@ -116,8 +117,8 @@ impl Library {
             .unwrap_or_default()
             .as_secs();
 
-        let period_timestamp = timestamp / 600 * 600;
-        let backup_path = progress_path.with_extension(format!("json.backup.{}", period_timestamp));
+        let period_timestamp = timestamp / CONFIG.backup_timestamp_interval * CONFIG.backup_timestamp_interval;
+        let backup_path = progress_path.with_extension(format!("{}.{}" , CONFIG.backup_prefix, period_timestamp));
 
         if backup_path.exists() {
             return Ok(());
@@ -125,10 +126,9 @@ impl Library {
 
         std::fs::copy(progress_path, &backup_path)?;
 
-        // 清理 3 天前的备份
-        let three_days_ago = timestamp.saturating_sub(3 * 24 * 60 * 60);
+        let cutoff_timestamp = timestamp.saturating_sub(CONFIG.backup_retention_days * 24 * 60 * 60);
         if let Some(backup_dir) = progress_path.parent() {
-            Self::cleanup_old_backups(backup_dir, three_days_ago);
+            Self::cleanup_old_backups(backup_dir, cutoff_timestamp);
         }
 
         Ok(())
@@ -145,14 +145,12 @@ impl Library {
                 continue;
             };
 
-            // 从文件名解析时间戳: progress.json.backup.1234567890
-            if let Some(ts_str) = name.strip_prefix("progress.json.backup.") {
-                if let Ok(file_timestamp) = ts_str.parse::<u64>() {
-                    if file_timestamp < cutoff_timestamp {
-                        let _ = std::fs::remove_file(&path);
-                    }
+            if let Some(ts_str) = name.strip_prefix(&format!("{}.", CONFIG.backup_prefix))
+                && let Ok(file_timestamp) = ts_str.parse::<u64>()
+                    && file_timestamp < cutoff_timestamp
+                {
+                    let _ = std::fs::remove_file(&path);
                 }
-            }
         }
     }
 

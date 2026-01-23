@@ -16,6 +16,31 @@ fn count_physical_lines(line: &str, width: usize) -> usize {
     line.width().div_ceil(width)
 }
 
+/// 通用列表导航函数
+/// 
+/// # 参数
+/// - `current`: 当前选中索引
+/// - `len`: 列表长度
+/// - `move_up`: 是否向上移动
+/// 
+/// # 返回
+/// 新的选中索引
+fn navigate_list(current: Option<usize>, len: usize, move_up: bool) -> Option<usize> {
+    if len == 0 {
+        return None;
+    }
+
+    let new_idx = if move_up {
+        // 向上移动：有选中则减1，无选中则选中最后一项
+        current.map(|idx| idx.saturating_sub(1)).unwrap_or(len - 1)
+    } else {
+        // 向下移动：有选中则加1（循环），无选中则选中第一项
+        current.map(|idx| (idx + 1) % len).unwrap_or(0)
+    };
+
+    Some(new_idx)
+}
+
 pub fn handle_key(app: &mut App, key: KeyCode) {
     match app.state {
         AppState::Bookshelf => handle_bookshelf_key(app, key),
@@ -48,27 +73,13 @@ fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
             }
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            if let Some(bookmarks) = app.get_current_bookmarks()
-                && !bookmarks.is_empty()
-            {
-                let current = app.bookmark.selected_index.unwrap_or(0);
-                let next = if current > 0 {
-                    current - 1
-                } else {
-                    bookmarks.len() - 1
-                };
-                app.bookmark.selected_index = Some(next);
+            if let Some(bookmarks) = app.get_current_bookmarks() {
+                app.bookmark.selected_index = navigate_list(app.bookmark.selected_index, bookmarks.len(), true);
             }
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if let Some(bookmarks) = app.get_current_bookmarks()
-                && !bookmarks.is_empty()
-            {
-                let next = match app.bookmark.selected_index {
-                    None => 0,
-                    Some(current) => (current + 1) % bookmarks.len(),
-                };
-                app.bookmark.selected_index = Some(next);
+            if let Some(bookmarks) = app.get_current_bookmarks() {
+                app.bookmark.selected_index = navigate_list(app.bookmark.selected_index, bookmarks.len(), false);
             }
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
@@ -78,12 +89,11 @@ fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
             {
                 // 调整选中索引
                 if let Some(bookmarks) = app.get_current_bookmarks() {
-                    if !bookmarks.is_empty() {
-                        let new_index = index.min(bookmarks.len() - 1);
-                        app.bookmark.selected_index = Some(new_index);
+                    app.bookmark.selected_index = if bookmarks.is_empty() {
+                        None
                     } else {
-                        app.bookmark.selected_index = None;
-                    }
+                        Some(index.min(bookmarks.len() - 1))
+                    };
                 }
             }
         }
@@ -159,25 +169,10 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
             app.should_quit = true;
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            if !app.novels.is_empty() {
-                let current = app.selected_novel_index.unwrap_or(0);
-                let next = if current > 0 {
-                    current - 1
-                } else {
-                    app.novels.len() - 1
-                };
-                app.selected_novel_index = Some(next);
-            }
+            app.selected_novel_index = navigate_list(app.selected_novel_index, app.novels.len(), true);
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if !app.novels.is_empty() {
-                // 如果当前没有选中任何小说，则选中第一本
-                let next = match app.selected_novel_index {
-                    None => 0,
-                    Some(current) => (current + 1) % app.novels.len(),
-                };
-                app.selected_novel_index = Some(next);
-            }
+            app.selected_novel_index = navigate_list(app.selected_novel_index, app.novels.len(), false);
         }
         KeyCode::Enter => {
             if let Some(index) = app.selected_novel_index
@@ -227,19 +222,11 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
 
         match key {
             KeyCode::Char('q') | KeyCode::Char('Q') => {
-                app.library
-                    .update_novel_progress(&novel.path, novel.progress.clone());
-                if let Err(e) = app.library.save() {
-                    app.set_error(format!("Failed to save progress: {}", e));
-                }
+                app.save_current_progress();
                 app.should_quit = true;
             }
             KeyCode::Esc => {
-                app.library
-                    .update_novel_progress(&novel.path, novel.progress.clone());
-                if let Err(e) = app.library.save() {
-                    app.set_error(format!("Failed to save progress: {}", e));
-                }
+                app.save_current_progress();
                 app.state = AppState::Bookshelf;
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -320,46 +307,20 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
             KeyCode::Char('[') => {
                 // 跳转到上一章
                 if !novel.chapters.is_empty() {
-                    let current_line = novel.progress.scroll_offset;
-                    let mut current_idx = 0;
-                    for (index, chapter) in novel.chapters.iter().enumerate() {
-                        if chapter.start_line <= current_line {
-                            current_idx = index;
-                        } else {
-                            break;
-                        }
-                    }
-
+                    let current_idx = App::find_chapter_index(&novel.chapters, novel.progress.scroll_offset);
                     if current_idx > 0 {
                         novel.progress.scroll_offset = novel.chapters[current_idx - 1].start_line;
-                        app.library
-                            .update_novel_progress(&novel.path, novel.progress.clone());
-                        if let Err(e) = app.library.save() {
-                            app.set_error(format!("Failed to save progress: {}", e));
-                        }
+                        app.save_current_progress();
                     }
                 }
             }
             KeyCode::Char(']') => {
                 // 跳转到下一章
                 if !novel.chapters.is_empty() {
-                    let current_line = novel.progress.scroll_offset;
-                    let mut current_idx = 0;
-                    for (index, chapter) in novel.chapters.iter().enumerate() {
-                        if chapter.start_line <= current_line {
-                            current_idx = index;
-                        } else {
-                            break;
-                        }
-                    }
-
+                    let current_idx = App::find_chapter_index(&novel.chapters, novel.progress.scroll_offset);
                     if current_idx + 1 < novel.chapters.len() {
                         novel.progress.scroll_offset = novel.chapters[current_idx + 1].start_line;
-                        app.library
-                            .update_novel_progress(&novel.path, novel.progress.clone());
-                        if let Err(e) = app.library.save() {
-                            app.set_error(format!("Failed to save progress: {}", e));
-                        }
+                        app.save_current_progress();
                     }
                 }
             }
@@ -386,11 +347,7 @@ fn handle_search_key(app: &mut App, key: KeyCode) {
                 let (line_num, _) = app.search.results[index];
                 if let Some(novel) = &mut app.current_novel {
                     novel.progress.scroll_offset = line_num;
-                    app.library
-                        .update_novel_progress(&novel.path, novel.progress.clone());
-                    if let Err(e) = app.library.save() {
-                        app.set_error(format!("Failed to save progress: {}", e));
-                    }
+                    app.save_current_progress();
                 }
                 app.state = AppState::Reading;
             }
@@ -447,36 +404,18 @@ fn handle_chapter_list_key(app: &mut App, key: KeyCode) {
             {
                 let chapter = &novel.chapters[index];
                 novel.progress.scroll_offset = chapter.start_line;
-                app.library
-                    .update_novel_progress(&novel.path, novel.progress.clone());
-                if let Err(e) = app.library.save() {
-                    app.set_error(format!("Failed to save progress: {}", e));
-                }
+                app.save_current_progress();
                 app.state = AppState::Reading;
             }
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            if let Some(novel) = &app.current_novel
-                && !novel.chapters.is_empty()
-            {
-                let current = app.selected_chapter_index.unwrap_or(0);
-                let next = if current > 0 {
-                    current - 1
-                } else {
-                    novel.chapters.len() - 1
-                };
-                app.selected_chapter_index = Some(next);
+            if let Some(novel) = &app.current_novel {
+                app.selected_chapter_index = navigate_list(app.selected_chapter_index, novel.chapters.len(), true);
             }
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if let Some(novel) = &app.current_novel
-                && !novel.chapters.is_empty()
-            {
-                let next = match app.selected_chapter_index {
-                    None => 0,
-                    Some(current) => (current + 1) % novel.chapters.len(),
-                };
-                app.selected_chapter_index = Some(next);
+            if let Some(novel) = &app.current_novel {
+                app.selected_chapter_index = navigate_list(app.selected_chapter_index, novel.chapters.len(), false);
             }
         }
         _ => {}
@@ -500,6 +439,7 @@ fn handle_settings_key(app: &mut App, key: KeyCode) {
 
 /// 处理设置主菜单的键盘事件
 fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
+    use crate::config::CONFIG;
     use crate::state::SettingsMode;
 
     match key {
@@ -509,26 +449,10 @@ fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
             app.settings.reset();
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            let menu_count = 2; // 删除小说、清理孤立记录
-            if menu_count > 0 {
-                let current = app.settings.selected_option.unwrap_or(0);
-                let next = if current > 0 {
-                    current - 1
-                } else {
-                    menu_count - 1
-                };
-                app.settings.selected_option = Some(next);
-            }
+            app.settings.selected_option = navigate_list(app.settings.selected_option, CONFIG.settings_menu_count, true);
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            let menu_count = 2; // 删除小说、清理孤立记录
-            if menu_count > 0 {
-                let next = match app.settings.selected_option {
-                    None => 0,
-                    Some(current) => (current + 1) % menu_count,
-                };
-                app.settings.selected_option = Some(next);
-            }
+            app.settings.selected_option = navigate_list(app.settings.selected_option, CONFIG.settings_menu_count, false);
         }
         KeyCode::Enter => {
             if let Some(index) = app.settings.selected_option {
@@ -565,24 +489,10 @@ fn handle_delete_novel_key(app: &mut App, key: KeyCode) {
             app.settings.mode = SettingsMode::MainMenu;
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            if !app.novels.is_empty() {
-                let current = app.settings.selected_delete_novel_index.unwrap_or(0);
-                let next = if current > 0 {
-                    current - 1
-                } else {
-                    app.novels.len() - 1
-                };
-                app.settings.selected_delete_novel_index = Some(next);
-            }
+            app.settings.selected_delete_novel_index = navigate_list(app.settings.selected_delete_novel_index, app.novels.len(), true);
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if !app.novels.is_empty() {
-                let next = match app.settings.selected_delete_novel_index {
-                    None => 0,
-                    Some(current) => (current + 1) % app.novels.len(),
-                };
-                app.settings.selected_delete_novel_index = Some(next);
-            }
+            app.settings.selected_delete_novel_index = navigate_list(app.settings.selected_delete_novel_index, app.novels.len(), false);
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
             if let Some(index) = app.settings.selected_delete_novel_index
@@ -606,24 +516,10 @@ fn handle_delete_orphaned_key(app: &mut App, key: KeyCode) {
             app.settings.mode = SettingsMode::MainMenu;
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            if !app.settings.orphaned_novels.is_empty() {
-                let current = app.settings.selected_orphaned_index.unwrap_or(0);
-                let next = if current > 0 {
-                    current - 1
-                } else {
-                    app.settings.orphaned_novels.len() - 1
-                };
-                app.settings.selected_orphaned_index = Some(next);
-            }
+            app.settings.selected_orphaned_index = navigate_list(app.settings.selected_orphaned_index, app.settings.orphaned_novels.len(), true);
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if !app.settings.orphaned_novels.is_empty() {
-                let next = match app.settings.selected_orphaned_index {
-                    None => 0,
-                    Some(current) => (current + 1) % app.settings.orphaned_novels.len(),
-                };
-                app.settings.selected_orphaned_index = Some(next);
-            }
+            app.settings.selected_orphaned_index = navigate_list(app.settings.selected_orphaned_index, app.settings.orphaned_novels.len(), false);
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
             if let Some(index) = app.settings.selected_orphaned_index
