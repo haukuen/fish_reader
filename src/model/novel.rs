@@ -39,10 +39,16 @@ where
 
 impl Novel {
     /// 创建新小说实例
-    /// # 参数
-    /// - `path`: 小说文件路径
     ///
-    /// 不会立即加载文件内容，需要显式调用load_content
+    /// 不会立即加载文件内容，需要显式调用 `load_content`。
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - 小说文件路径
+    ///
+    /// # Returns
+    ///
+    /// 一个新的 `Novel` 实例，标题从文件名提取，内容为空。
     pub fn new(path: PathBuf) -> Self {
         let title = path
             .file_stem()
@@ -59,6 +65,13 @@ impl Novel {
         }
     }
 
+    /// 从文件加载小说内容
+    ///
+    /// 读取文件内容并自动解析章节目录。
+    ///
+    /// # Errors
+    ///
+    /// 如果文件读取失败则返回 IO 错误。
     pub fn load_content(&mut self) -> std::io::Result<()> {
         let content = std::fs::read_to_string(&self.path)?;
         self.content = Arc::new(content);
@@ -67,8 +80,13 @@ impl Novel {
     }
 
     /// 解析章节目录
-    /// # 功能
-    /// 从小说内容中自动识别章节标题，支持多种常见格式
+    ///
+    /// 从小说内容中自动识别章节标题，支持多种常见格式：
+    /// - 中文章节：第X章/回/节/卷/部/篇
+    /// - 英文章节：Chapter X
+    /// - 特殊章节：序章、楔子、尾声、番外等
+    /// - 数字格式：001.章节名、1.章节名
+    /// - 中文数字：一、二、
     pub fn parse_chapters(&mut self) {
         self.chapters.clear();
 
@@ -93,10 +111,14 @@ impl Novel {
     }
 
     /// 判断一行文本是否为章节标题
-    /// # 参数
-    /// - `line`: 待检查的文本行
-    /// # 返回
-    /// 如果是章节标题返回true，否则返回false
+    ///
+    /// # Arguments
+    ///
+    /// * `line` - 待检查的文本行
+    ///
+    /// # Returns
+    ///
+    /// 如果是章节标题返回 `true`，否则返回 `false`。
     fn is_chapter_title(&self, line: &str) -> bool {
         let line = line.trim();
 
@@ -182,7 +204,9 @@ impl Novel {
     }
 }
 
-/// 章节信息结构
+/// 章节信息
+///
+/// 表示小说中的一个章节，包含标题和起始位置。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Chapter {
     /// 章节标题
@@ -191,7 +215,9 @@ pub struct Chapter {
     pub start_line: usize,
 }
 
-/// 书签信息结构
+/// 书签信息
+///
+/// 表示用户在小说中添加的书签，包含名称、位置和创建时间。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Bookmark {
     /// 书签名称
@@ -204,9 +230,15 @@ pub struct Bookmark {
 
 impl Bookmark {
     /// 创建新书签
-    /// # 参数
-    /// - `name`: 书签名称
-    /// - `position`: 书签位置（行号）
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - 书签名称
+    /// * `position` - 书签位置（行号）
+    ///
+    /// # Returns
+    ///
+    /// 一个新的 `Bookmark` 实例，时间戳自动设置为当前时间。
     pub fn new(name: String, position: usize) -> Self {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -221,7 +253,9 @@ impl Bookmark {
     }
 }
 
-/// 阅读进度跟踪结构
+/// 阅读进度
+///
+/// 跟踪用户在小说中的阅读位置和书签列表。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct ReadingProgress {
     #[serde(default)]
@@ -232,9 +266,13 @@ pub struct ReadingProgress {
 
 impl ReadingProgress {
     /// 添加书签
-    /// # 参数
-    /// - `name`: 书签名称
-    /// - `position`: 书签位置（行号）
+    ///
+    /// 书签会自动按位置排序。
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - 书签名称
+    /// * `position` - 书签位置（行号）
     pub fn add_bookmark(&mut self, name: String, position: usize) {
         let bookmark = Bookmark::new(name, position);
         self.bookmarks.push(bookmark);
@@ -243,8 +281,14 @@ impl ReadingProgress {
     }
 
     /// 删除书签
-    /// # 参数
-    /// - `index`: 书签在列表中的索引
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - 书签在列表中的索引
+    ///
+    /// # Returns
+    ///
+    /// 如果索引有效返回被删除的书签，否则返回 `None`。
     pub fn remove_bookmark(&mut self, index: usize) -> Option<Bookmark> {
         if index < self.bookmarks.len() {
             Some(self.bookmarks.remove(index))

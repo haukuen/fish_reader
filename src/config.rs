@@ -1,4 +1,6 @@
-/// 应用程序配置常量
+/// 应用程序配置
+///
+/// 包含目录路径、文件扩展名、备份策略等配置项。
 pub struct AppConfig {
     /// 应用目录名称
     pub dir_name: &'static str,
@@ -17,7 +19,11 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    /// 创建默认配置
+    /// 创建默认配置实例
+    ///
+    /// # Returns
+    ///
+    /// 默认的配置常量。
     pub const fn default() -> Self {
         Self {
             dir_name: ".fish_reader",
@@ -32,4 +38,6 @@ impl AppConfig {
 }
 
 /// 全局配置实例
+///
+/// 应用程序使用此常量访问所有配置项。
 pub const CONFIG: AppConfig = AppConfig::default();

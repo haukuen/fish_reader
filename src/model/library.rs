@@ -10,6 +10,9 @@ pub struct Library {
     pub novels: Vec<NovelInfo>,
 }
 
+/// 小说信息
+///
+/// 存储小说的标题、路径和阅读进度，用于持久化。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NovelInfo {
     pub title: String,
@@ -18,10 +21,23 @@ pub struct NovelInfo {
 }
 
 impl Library {
+    /// 创建新的空图书馆
+    ///
+    /// # Returns
+    ///
+    /// 一个不包含任何小说的新实例。
     pub fn new() -> Self {
         Library { novels: Vec::new() }
     }
 
+    /// 从文件加载图书馆数据
+    ///
+    /// 如果进度文件不存在或解析失败，返回一个新的空实例。
+    /// 损坏的文件会被备份为 `.json.corrupted.{timestamp}`。
+    ///
+    /// # Returns
+    ///
+    /// 加载的图书馆实例，或新实例（如果加载失败）。
     pub fn load() -> Self {
         let progress_path = Self::get_progress_path();
         if progress_path.exists() {
@@ -57,9 +73,13 @@ impl Library {
         Self::new()
     }
 
-    /// 持久化保存进度数据
-    /// # 错误
-    /// 返回IO操作或序列化错误
+    /// 保存图书馆数据到文件
+    ///
+    /// 使用原子写入确保数据完整性，自动创建备份文件。
+    ///
+    /// # Errors
+    ///
+    /// 返回 IO 操作或序列化错误。
     pub fn save(&self) -> std::io::Result<()> {
         let progress_path = Self::get_progress_path();
         let content = serde_json::to_string_pretty(self)?;
@@ -81,6 +101,11 @@ impl Library {
         Ok(())
     }
 
+    /// 获取进度文件的路径
+    ///
+    /// # Returns
+    ///
+    /// 进度文件的完整路径。测试环境下返回临时目录。
     pub fn get_progress_path() -> PathBuf {
         #[cfg(test)]
         {
@@ -154,6 +179,14 @@ impl Library {
         }
     }
 
+    /// 更新或添加小说的阅读进度
+    ///
+    /// 如果小说已存在则更新进度，否则创建新条目。
+    ///
+    /// # Arguments
+    ///
+    /// * `novel_path` - 小说文件路径
+    /// * `progress` - 阅读进度
     pub fn update_novel_progress(&mut self, novel_path: &Path, progress: ReadingProgress) {
         if let Some(novel) = self.novels.iter_mut().find(|n| n.path == novel_path) {
             novel.progress = progress;
@@ -172,6 +205,15 @@ impl Library {
         }
     }
 
+    /// 获取小说的阅读进度
+    ///
+    /// # Arguments
+    ///
+    /// * `novel_path` - 小说文件路径
+    ///
+    /// # Returns
+    ///
+    /// 小说的阅读进度，如果小说不存在则返回默认进度。
     pub fn get_novel_progress(&self, novel_path: &Path) -> ReadingProgress {
         self.novels
             .iter()

@@ -3,7 +3,16 @@ use crate::state::AppState;
 use crossterm::event::{KeyCode, MouseEvent, MouseEventKind};
 use unicode_width::UnicodeWidthStr;
 
-/// 估算一个字符串在换行时将占据的物理行数。
+/// 计算字符串在指定宽度下占用的物理行数
+///
+/// # Arguments
+///
+/// * `line` - 要计算的字符串
+/// * `width` - 可用宽度（字符数）
+///
+/// # Returns
+///
+/// 占用的物理行数。空字符串或零宽度返回 1。
 fn count_physical_lines(line: &str, width: usize) -> usize {
     if line.is_empty() {
         return 1; // 空行也会占用一个物理行
@@ -17,14 +26,18 @@ fn count_physical_lines(line: &str, width: usize) -> usize {
 }
 
 /// 通用列表导航函数
-/// 
-/// # 参数
-/// - `current`: 当前选中索引
-/// - `len`: 列表长度
-/// - `move_up`: 是否向上移动
-/// 
-/// # 返回
-/// 新的选中索引
+///
+/// 根据移动方向计算新的选中索引，支持循环导航。
+///
+/// # Arguments
+///
+/// * `current` - 当前选中索引
+/// * `len` - 列表长度
+/// * `move_up` - 是否向上移动（`true` 为向上，`false` 为向下）
+///
+/// # Returns
+///
+/// 新的选中索引。如果列表为空则返回 `None`。
 fn navigate_list(current: Option<usize>, len: usize, move_up: bool) -> Option<usize> {
     if len == 0 {
         return None;
@@ -41,6 +54,14 @@ fn navigate_list(current: Option<usize>, len: usize, move_up: bool) -> Option<us
     Some(new_idx)
 }
 
+/// 处理键盘事件
+///
+/// 根据当前应用状态将键盘事件分发到对应的处理函数。
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
 pub fn handle_key(app: &mut App, key: KeyCode) {
     match app.state {
         AppState::Bookshelf => handle_bookshelf_key(app, key),
@@ -54,10 +75,20 @@ pub fn handle_key(app: &mut App, key: KeyCode) {
 }
 
 /// 处理书签列表模式下的键盘事件
-/// # 参数
-/// - `key`: 按下的键位代码
-/// # 功能
-/// 处理书签选择、跳转和删除
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
+///
+/// # Behavior
+///
+/// - `Esc`/`q`: 返回上一个状态
+/// - `Enter`: 跳转到选中的书签
+/// - `Up`/`k`: 向上选择
+/// - `Down`/`j`: 向下选择
+/// - `d`: 删除选中的书签
+/// - `a`: 进入添加书签模式
 fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
@@ -107,10 +138,18 @@ fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
 }
 
 /// 处理添加书签模式下的键盘事件
-/// # 参数
-/// - `key`: 按下的键位代码
-/// # 功能
-/// 处理书签名称和描述输入
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
+///
+/// # Behavior
+///
+/// - `Esc`/`q`: 取消添加，返回上一个状态
+/// - `Enter`: 确认添加书签
+/// - `Backspace`: 删除输入的最后一个字符
+/// - 其他字符: 添加到输入框
 fn handle_bookmark_add_key(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
@@ -139,6 +178,13 @@ fn handle_bookmark_add_key(app: &mut App, key: KeyCode) {
 }
 
 /// 处理鼠标事件
+///
+/// 将鼠标滚动事件转换为对应的键盘事件并分发。
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `mouse` - 鼠标事件
 pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
     match mouse.kind {
         MouseEventKind::ScrollUp => match app.state {
@@ -163,6 +209,20 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
     }
 }
 
+/// 处理书架模式下的键盘事件
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
+///
+/// # Behavior
+///
+/// - `Esc`/`q`: 退出应用
+/// - `Enter`: 打开选中的小说
+/// - `Up`/`k`: 向上选择
+/// - `Down`/`j`: 向下选择
+/// - `s`: 进入设置页面
 fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
@@ -204,10 +264,26 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
 }
 
 /// 处理阅读器模式下的键盘事件
-/// # 参数
-/// - `key`: 按下的键位代码
-/// # 功能
-/// 实现滚动控制、进度保存和界面切换
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
+///
+/// # Behavior
+///
+/// - `q`: 退出应用（保存进度）
+/// - `Esc`: 返回书架（保存进度）
+/// - `Up`/`k`: 向上滚动一行
+/// - `Down`/`j`: 向下滚动一行
+/// - `Left`/`h`: 向上翻页
+/// - `Right`/`l`: 向下翻页
+/// - `/`: 进入搜索模式
+/// - `t`: 进入章节目录
+/// - `b`: 进入书签列表
+/// - `m`: 添加书签
+/// - `[`: 跳转到上一章
+/// - `]`: 跳转到下一章
 fn handle_reader_key(app: &mut App, key: KeyCode) {
     if let Some(novel) = &mut app.current_novel {
         let lines: Vec<&str> = novel.content.lines().collect();
@@ -330,10 +406,20 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
 }
 
 /// 处理搜索模式下的键盘事件
-/// # 参数
-/// - `key`: 按下的键位代码
-/// # 功能
-/// 处理搜索输入、结果选择和跳转
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
+///
+/// # Behavior
+///
+/// - `Esc`/`q`: 返回上一个状态
+/// - `Enter`: 跳转到选中的搜索结果
+/// - `Up`: 向上选择搜索结果
+/// - `Down`: 向下选择搜索结果
+/// - `Backspace`: 删除输入的最后一个字符
+/// - 其他字符: 添加到搜索框并执行搜索
 fn handle_search_key(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
@@ -387,10 +473,18 @@ fn handle_search_key(app: &mut App, key: KeyCode) {
 }
 
 /// 处理章节目录模式下的键盘事件
-/// # 参数
-/// - `key`: 按下的键位代码
-/// # 功能
-/// 处理章节选择、跳转和返回
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
+///
+/// # Behavior
+///
+/// - `Esc`/`q`: 返回阅读模式
+/// - `Enter`: 跳转到选中的章节
+/// - `Up`/`k`: 向上选择
+/// - `Down`/`j`: 向下选择
 fn handle_chapter_list_key(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
@@ -423,10 +517,13 @@ fn handle_chapter_list_key(app: &mut App, key: KeyCode) {
 }
 
 /// 处理设置页面的键盘事件
-/// # 参数
-/// - `key`: 按下的键位代码
-/// # 功能
-/// 处理设置界面的二级菜单导航和操作
+///
+/// 根据当前设置模式分发到对应的处理函数。
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
 fn handle_settings_key(app: &mut App, key: KeyCode) {
     use crate::state::SettingsMode;
 
@@ -438,6 +535,18 @@ fn handle_settings_key(app: &mut App, key: KeyCode) {
 }
 
 /// 处理设置主菜单的键盘事件
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
+///
+/// # Behavior
+///
+/// - `Esc`/`q`: 返回书架
+/// - `Up`/`k`: 向上选择
+/// - `Down`/`j`: 向下选择
+/// - `Enter`: 进入选中的子菜单
 fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
     use crate::config::CONFIG;
     use crate::state::SettingsMode;
@@ -480,6 +589,18 @@ fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
 }
 
 /// 处理删除小说模式的键盘事件
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
+///
+/// # Behavior
+///
+/// - `Esc`/`q`: 返回设置主菜单
+/// - `Up`/`k`: 向上选择
+/// - `Down`/`j`: 向下选择
+/// - `d`: 删除选中的小说
 fn handle_delete_novel_key(app: &mut App, key: KeyCode) {
     use crate::state::SettingsMode;
 
@@ -507,6 +628,18 @@ fn handle_delete_novel_key(app: &mut App, key: KeyCode) {
 }
 
 /// 处理删除孤立记录模式的键盘事件
+///
+/// # Arguments
+///
+/// * `app` - 应用实例的可变引用
+/// * `key` - 按下的键位代码
+///
+/// # Behavior
+///
+/// - `Esc`/`q`: 返回设置主菜单
+/// - `Up`/`k`: 向上选择
+/// - `Down`/`j`: 向下选择
+/// - `d`: 删除选中的孤立记录
 fn handle_delete_orphaned_key(app: &mut App, key: KeyCode) {
     use crate::state::SettingsMode;
 

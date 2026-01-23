@@ -19,6 +19,9 @@ pub struct SearchState {
 }
 
 impl SearchState {
+    /// 清空搜索状态
+    ///
+    /// 重置输入框、搜索结果和选中索引。
     pub fn clear(&mut self) {
         self.input.clear();
         self.results.clear();
@@ -36,6 +39,7 @@ pub struct BookmarkState {
 }
 
 impl BookmarkState {
+    /// 清空输入框内容
     pub fn clear_input(&mut self) {
         self.input.clear();
     }
@@ -57,6 +61,7 @@ pub struct SettingsState {
 }
 
 impl SettingsState {
+    /// 重置设置状态到主菜单
     pub fn reset(&mut self) {
         self.mode = SettingsMode::MainMenu;
         self.selected_option = None;
@@ -127,6 +132,11 @@ impl App {
         Ok(app)
     }
 
+    /// 获取小说存储目录路径
+    ///
+    /// # Returns
+    ///
+    /// 小说目录的完整路径。在测试环境下返回临时目录，否则返回用户主目录下的 `.fish_reader/novels`。
     pub fn get_novels_dir() -> PathBuf {
         #[cfg(test)]
         {
@@ -153,7 +163,21 @@ impl App {
         }
     }
 
-    /// 从目录加载小说列表
+    /// 从指定目录扫描并加载小说列表
+    ///
+    /// 仅扫描支持的文件扩展名，采用懒加载策略（不加载文件内容）。
+    ///
+    /// # Arguments
+    ///
+    /// * `dir` - 要扫描的目录路径
+    ///
+    /// # Returns
+    ///
+    /// 返回找到的小说列表，如果目录不存在则返回空列表。
+    ///
+    /// # Errors
+    ///
+    /// 如果目录读取失败则返回错误。
     fn load_novels_from_dir(dir: &Path) -> Result<Vec<Novel>> {
         let mut novels = Vec::new();
 
@@ -176,9 +200,13 @@ impl App {
         Ok(novels)
     }
 
-    /// 执行搜索操作
-    /// # 功能
-    /// 在当前小说内容中搜索包含关键词的行
+    /// 在当前小说内容中搜索关键词
+    ///
+    /// 执行不区分大小写的搜索，更新搜索结果列表。
+    ///
+    /// # Note
+    ///
+    /// 搜索输入为空时会清空结果列表。
     pub fn perform_search(&mut self) {
         if let Some(novel) = &self.current_novel {
             if !self.search.input.is_empty() {
@@ -216,9 +244,11 @@ impl App {
         }
     }
 
-    /// 根据当前阅读位置找到最接近的章节索引
-    /// # 返回
-    /// 返回最接近当前阅读位置的章节索引，如果没有章节则返回None
+    /// 根据当前阅读位置查找对应的章节索引
+    ///
+    /// # Returns
+    ///
+    /// 返回最接近当前阅读位置的章节索引。如果没有章节或当前未打开小说，返回 `None`。
     pub fn find_current_chapter_index(&self) -> Option<usize> {
         self.current_novel.as_ref().and_then(|novel| {
             if novel.chapters.is_empty() {
@@ -228,9 +258,9 @@ impl App {
         })
     }
 
-    /// 检测孤立的小说记录（JSON中存在但文件已删除）
-    /// # 功能
-    /// 扫描library中的所有小说记录，找出文件已被删除的记录
+    /// 检测孤立的小说记录
+    ///
+    /// 扫描 library 中所有小说记录，找出 JSON 中存在但文件已被删除的记录。
     pub fn detect_orphaned_novels(&mut self) {
         self.settings.orphaned_novels.clear();
 
@@ -244,14 +274,21 @@ impl App {
         self.settings.selected_orphaned_index = None;
     }
 
-    /// 删除选中的小说文件和进度记录
-    /// # 参数
-    /// - `index`: 要删除的小说在novels列表中的索引
-    /// # 功能
+    /// 删除指定索引的小说
+    ///
+    /// 执行以下操作：
     /// 1. 删除物理文件
-    /// 2. 从novels列表中移除
-    /// 3. 从library中移除进度记录
-    /// 4. 保存library更改
+    /// 2. 从 novels 列表中移除
+    /// 3. 从 library 中移除进度记录
+    /// 4. 保存 library 更改
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - 要删除的小说在 novels 列表中的索引
+    ///
+    /// # Errors
+    ///
+    /// 如果文件删除或保存失败则返回错误。
     pub fn delete_novel(&mut self, index: usize) -> Result<()> {
         if index < self.novels.len() {
             let novel = &self.novels[index];
@@ -277,9 +314,11 @@ impl App {
         Ok(())
     }
 
-    /// 添加书签到当前小说
-    /// # 参数
-    /// - `name`: 书签名称
+    /// 在当前小说的阅读位置添加书签
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - 书签名称
     pub fn add_bookmark(&mut self, name: String) {
         if let Some(novel) = &mut self.current_novel {
             let position = novel.progress.scroll_offset;
@@ -288,9 +327,15 @@ impl App {
         }
     }
 
-    /// 删除当前小说的书签
-    /// # 参数
-    /// - `index`: 书签索引
+    /// 删除当前小说的指定书签
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - 要删除的书签索引
+    ///
+    /// # Returns
+    ///
+    /// 如果删除成功返回 `Some(())`，如果索引无效或当前无小说则返回 `None`。
     pub fn remove_bookmark(&mut self, index: usize) -> Option<()> {
         if let Some(novel) = &mut self.current_novel
             && novel.progress.remove_bookmark(index).is_some()
@@ -303,8 +348,14 @@ impl App {
     }
 
     /// 跳转到指定书签位置
-    /// # 参数
-    /// - `index`: 书签索引
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - 要跳转的书签索引
+    ///
+    /// # Returns
+    ///
+    /// 如果跳转成功返回 `Some(())`，如果索引无效或当前无小说则返回 `None`。
     pub fn jump_to_bookmark(&mut self, index: usize) -> Option<()> {
         if let Some(novel) = &mut self.current_novel
             && let Some(bookmark) = novel.progress.bookmarks.get(index)
@@ -318,25 +369,35 @@ impl App {
     }
 
     /// 获取当前小说的书签列表
+    ///
+    /// # Returns
+    ///
+    /// 如果当前有打开的小说则返回其书签列表的引用，否则返回 `None`。
     pub fn get_current_bookmarks(&self) -> Option<&Vec<crate::model::novel::Bookmark>> {
         self.current_novel
             .as_ref()
             .map(|novel| &novel.progress.bookmarks)
     }
 
-    /// 清空书签输入框
+    /// 清空书签输入框内容
     pub fn clear_bookmark_inputs(&mut self) {
         self.bookmark.clear_input();
     }
 
-    /// 设置错误消息，将在下一帧显示给用户
+    /// 设置错误消息
+    ///
+    /// 错误消息将在下一帧渲染时显示给用户。
+    ///
+    /// # Arguments
+    ///
+    /// * `msg` - 错误消息内容
     pub fn set_error(&mut self, msg: impl Into<String>) {
         self.error_message = Some(msg.into());
     }
 
     /// 保存当前小说的阅读进度
-    /// # 功能
-    /// 更新并保存当前小说的进度，如果失败则设置错误消息
+    ///
+    /// 更新并保存当前小说的进度。如果保存失败，会设置错误消息。
     pub fn save_current_progress(&mut self) {
         if let Some(novel) = &self.current_novel {
             self.library
@@ -347,12 +408,16 @@ impl App {
         }
     }
 
-    /// 查找当前行所在的章节索引
-    /// # 参数
-    /// - `chapters`: 章节列表
-    /// - `current_line`: 当前行号
-    /// # 返回
-    /// 最接近当前行的章节索引
+    /// 查找指定行所在的章节索引
+    ///
+    /// # Arguments
+    ///
+    /// * `chapters` - 章节列表
+    /// * `current_line` - 当前行号
+    ///
+    /// # Returns
+    ///
+    /// 最接近当前行的章节索引（即 `start_line` 小于等于 `current_line` 的最大索引）。
     pub fn find_chapter_index(
         chapters: &[crate::model::novel::Chapter],
         current_line: usize,

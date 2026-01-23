@@ -37,7 +37,14 @@ pub fn render_error_message(f: &mut Frame, error_msg: &str, area: Rect) {
     f.render_widget(error, error_area);
 }
 
-/// UI渲染函数
+/// 主 UI 渲染函数
+///
+/// 根据应用状态渲染对应的界面，并处理错误消息显示。
+///
+/// # Arguments
+///
+/// * `f` - ratatui 框架的可变引用
+/// * `app` - 应用实例的引用
 pub fn render(f: &mut Frame, app: &App) {
     match app.state {
         AppState::Bookshelf => bookshelf::render_bookshelf(f, app),
