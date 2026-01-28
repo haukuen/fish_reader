@@ -240,7 +240,7 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
             {
                 let mut novel = app.novels[index].clone();
 
-                if novel.content.is_empty()
+                if novel.is_empty()
                     && let Err(e) = novel.load_content()
                 {
                     app.set_error(format!("Failed to load novel: {}", e));
@@ -286,8 +286,7 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
 /// - `]`: 跳转到下一章
 fn handle_reader_key(app: &mut App, key: KeyCode) {
     if let Some(novel) = &mut app.current_novel {
-        let lines: Vec<&str> = novel.content.lines().collect();
-        let max_scroll = lines.len().saturating_sub(1);
+        let max_scroll = novel.line_count().saturating_sub(1);
 
         let content_width = app.terminal_size.width.saturating_sub(4) as usize;
         let content_height = (app.terminal_size.height as usize)
@@ -323,7 +322,7 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
                 let mut logical_lines_to_jump = 0;
 
                 // 从当前行向后迭代以找到前一页的开头
-                for line in lines.iter().take(novel.progress.scroll_offset).rev() {
+                for line in novel.lines().iter().take(novel.progress.scroll_offset).rev() {
                     let line_height = count_physical_lines(line, content_width);
                     if physical_lines_in_prev_page + line_height > page_size {
                         break;
@@ -342,7 +341,7 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
                 let mut physical_lines_on_current_page = 0;
                 let mut logical_lines_to_jump = 0;
 
-                for line in lines.iter().skip(novel.progress.scroll_offset) {
+                for line in novel.lines().iter().skip(novel.progress.scroll_offset) {
                     let line_height = count_physical_lines(line, content_width);
                     if physical_lines_on_current_page + line_height > page_size {
                         break;

@@ -143,7 +143,14 @@ impl Library {
             .as_secs();
 
         let period_timestamp = timestamp / CONFIG.backup_timestamp_interval * CONFIG.backup_timestamp_interval;
-        let backup_path = progress_path.with_extension(format!("{}.{}" , CONFIG.backup_prefix, period_timestamp));
+
+        // 直接在文件名后追加备份后缀，避免 with_extension 替换原有扩展名
+        let file_name = progress_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(CONFIG.progress_filename);
+        let backup_name = format!("{}.{}.{}", file_name, CONFIG.backup_suffix, period_timestamp);
+        let backup_path = progress_path.with_file_name(backup_name);
 
         if backup_path.exists() {
             return Ok(());
@@ -164,18 +171,21 @@ impl Library {
             return;
         };
 
+        // 备份文件名格式: {progress_filename}.{backup_suffix}.{timestamp}
+        let backup_prefix = format!("{}.{}.", CONFIG.progress_filename, CONFIG.backup_suffix);
+
         for entry in entries.flatten() {
             let path = entry.path();
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
 
-            if let Some(ts_str) = name.strip_prefix(&format!("{}.", CONFIG.backup_prefix))
+            if let Some(ts_str) = name.strip_prefix(&backup_prefix)
                 && let Ok(file_timestamp) = ts_str.parse::<u64>()
-                    && file_timestamp < cutoff_timestamp
-                {
-                    let _ = std::fs::remove_file(&path);
-                }
+                && file_timestamp < cutoff_timestamp
+            {
+                let _ = std::fs::remove_file(&path);
+            }
         }
     }
 
