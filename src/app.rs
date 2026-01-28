@@ -210,15 +210,14 @@ impl App {
     pub fn perform_search(&mut self) {
         if let Some(novel) = &self.current_novel {
             if !self.search.input.is_empty() {
-                let lines: Vec<&str> = novel.content.lines().collect();
                 self.search.results.clear();
 
-                for (line_num, line) in lines.iter().enumerate() {
-                    if line
-                        .to_lowercase()
-                        .contains(&self.search.input.to_lowercase())
-                    {
-                        self.search.results.push((line_num, line.to_string()));
+                // 提前转换搜索词为小写，避免在循环中重复转换
+                let search_term = self.search.input.to_lowercase();
+
+                for (line_num, line) in novel.lines().iter().enumerate() {
+                    if line.to_lowercase().contains(&search_term) {
+                        self.search.results.push((line_num, line.clone()));
                     }
                 }
 
@@ -462,8 +461,8 @@ mod tests {
     fn test_perform_search() {
         let mut app = create_test_app();
         let mut novel = Novel::new(PathBuf::from("test.txt"));
-        novel.content =
-            std::sync::Arc::new("Hello world\nThis is a test\nAnother TEST line".to_string());
+        let content = "Hello world\nThis is a test\nAnother TEST line".to_string();
+        novel.set_content(content);
         app.current_novel = Some(novel);
 
         app.search.input = "test".to_string();

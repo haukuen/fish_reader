@@ -3,38 +3,20 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Novel {
     /// 小说标题（从文件名自动提取）
     pub title: String,
     /// 小说文件的绝对路径
     pub path: PathBuf,
     /// 小说文本内容（使用 Arc 共享所有权，避免克隆时复制大型字符串）
-    #[serde(
-        serialize_with = "serialize_arc_string",
-        deserialize_with = "deserialize_arc_string"
-    )]
-    pub content: Arc<String>,
+    content: Arc<String>,
+    /// 缓存的行数据（避免重复 lines().collect()）
+    lines: Arc<Vec<String>>,
     /// 当前阅读进度
     pub progress: ReadingProgress,
     /// 章节目录
     pub chapters: Vec<Chapter>,
-}
-
-// 自定义序列化函数：将 Arc<String> 序列化为普通字符串
-fn serialize_arc_string<S>(arc: &Arc<String>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    serializer.serialize_str(arc.as_ref())
-}
-
-// 自定义反序列化函数：将字符串反序列化为 Arc<String>
-fn deserialize_arc_string<'de, D>(deserializer: D) -> Result<Arc<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    String::deserialize(deserializer).map(Arc::new)
 }
 
 impl Novel {
@@ -60,6 +42,7 @@ impl Novel {
             title,
             path: path.clone(),
             content: Arc::new(String::new()),
+            lines: Arc::new(Vec::new()),
             progress: ReadingProgress::default(),
             chapters: Vec::new(),
         }
@@ -74,9 +57,36 @@ impl Novel {
     /// 如果文件读取失败则返回 IO 错误。
     pub fn load_content(&mut self) -> std::io::Result<()> {
         let content = std::fs::read_to_string(&self.path)?;
-        self.content = Arc::new(content);
+        self.set_content(content);
         self.parse_chapters();
         Ok(())
+    }
+
+    /// 获取总行数
+    #[inline]
+    pub fn line_count(&self) -> usize {
+        self.lines.len()
+    }
+
+    /// 获取行数据的引用
+    #[inline]
+    pub fn lines(&self) -> &[String] {
+        &self.lines
+    }
+
+    /// 检查内容是否为空
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.content.is_empty()
+    }
+
+    /// 设置内容（同时更新 content 和 lines 缓存，保证一致性）
+    ///
+    /// 此方法确保 content 和 lines 始终同步。
+    pub fn set_content(&mut self, content: String) {
+        let lines: Vec<String> = content.lines().map(String::from).collect();
+        self.lines = Arc::new(lines);
+        self.content = Arc::new(content);
     }
 
     /// 解析章节目录
@@ -90,9 +100,7 @@ impl Novel {
     pub fn parse_chapters(&mut self) {
         self.chapters.clear();
 
-        let lines: Vec<&str> = self.content.lines().collect();
-
-        for (line_num, line) in lines.iter().enumerate() {
+        for (line_num, line) in self.lines.iter().enumerate() {
             let trimmed = line.trim();
 
             // 跳过空行
@@ -330,16 +338,16 @@ mod tests {
     #[test]
     fn test_parse_chapters() {
         let mut novel = Novel::new(PathBuf::from("test.txt"));
-        novel.content = Arc::new(
-            "序章
+        let content = "序章
 Some content
 
 第一章 The Real Start
 More content
 Chapter 2
 Final content"
-                .to_string(),
-        );
+            .to_string();
+        // 使用 set_content 同时设置 content 和 lines 缓存
+        novel.set_content(content);
         novel.parse_chapters();
 
         assert_eq!(novel.chapters.len(), 3);
