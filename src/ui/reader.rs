@@ -16,16 +16,20 @@ pub fn render_reader(f: &mut Frame, app: &App) {
             height: area.height - 1,
         };
 
-        // 分割内容为行
-        let lines: Vec<&str> = novel.content.lines().collect();
+        // 使用缓存的行数据
+        let total_lines = novel.line_count();
 
-        // 计算可见行数
+        // 计算可见行数，clamp start_line 防止越界 panic
         let visible_height = content_area.height as usize;
-        let start_line = novel.progress.scroll_offset;
-        let end_line = (start_line + visible_height).min(lines.len());
+        let start_line = novel.progress.scroll_offset.min(total_lines.saturating_sub(1));
+        let end_line = (start_line + visible_height).min(total_lines);
 
         // 创建段落显示内容
-        let visible_content = lines[start_line..end_line].join("\n");
+        let visible_content = if start_line < total_lines {
+            novel.lines()[start_line..end_line].join("\n")
+        } else {
+            String::new()
+        };
         let content = Paragraph::new(visible_content)
             .style(Style::default().fg(Color::White))
             .block(Block::default().borders(Borders::ALL))
@@ -34,7 +38,6 @@ pub fn render_reader(f: &mut Frame, app: &App) {
         f.render_widget(content, content_area);
 
         // 创建帮助信息（贴近底部）
-        let total_lines = lines.len();
         let percent = if total_lines > 0 {
             ((start_line + 1) * 100) / total_lines
         } else {

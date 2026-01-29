@@ -8,9 +8,9 @@ pub struct AppConfig {
     pub supported_extensions: &'static [&'static str],
     /// 进度文件名
     pub progress_filename: &'static str,
-    /// 备份文件前缀
-    pub backup_prefix: &'static str,
-    /// 备份文件时间戳格式（10分钟间隔）
+    /// 备份文件后缀（完整格式: {progress_filename}.{backup_suffix}.{timestamp}）
+    pub backup_suffix: &'static str,
+    /// 备份文件时间戳间隔（秒），同一间隔内只保留一个备份
     pub backup_timestamp_interval: u64,
     /// 备份保留天数
     pub backup_retention_days: u64,
@@ -29,7 +29,7 @@ impl AppConfig {
             dir_name: ".fish_reader",
             supported_extensions: &["txt"],
             progress_filename: "progress.json",
-            backup_prefix: "progress.json.backup",
+            backup_suffix: "backup",
             backup_timestamp_interval: 600, // 10分钟
             backup_retention_days: 3,
             settings_menu_count: 2,
