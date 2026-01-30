@@ -149,7 +149,7 @@ impl App {
 
         #[cfg(not(test))]
         {
-            let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+            let mut path = home::home_dir().unwrap_or_else(|| PathBuf::from("."));
             path.push(CONFIG.dir_name);
             path.push("novels");
 
