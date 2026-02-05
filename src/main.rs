@@ -3,6 +3,7 @@ mod config;
 mod event;
 mod model;
 mod state;
+mod sync;
 mod ui;
 
 use anyhow::{Context, Result};
@@ -50,7 +51,19 @@ fn main() -> Result<()> {
         .get_matches();
 
     let mut app = App::new().context("创建应用失败")?;
+    
+    // Check for sync conflicts on startup
+    app.check_sync_conflicts();
+    
+    // Perform sync down if no conflicts
+    if !app.show_conflict_dialog {
+        app.sync_down();
+    }
+    
     run(&mut app).context("运行应用失败")?;
+    
+    // Sync up on exit
+    app.sync_up();
 
     Ok(())
 }
