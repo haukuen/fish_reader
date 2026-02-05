@@ -24,4 +24,6 @@ pub enum SettingsMode {
     DeleteNovel,
     /// 删除孤立记录模式
     DeleteOrphaned,
+    /// WebDAV配置模式
+    WebDavConfig,
 }
