@@ -1,8 +1,10 @@
 pub mod bookmark;
 pub mod bookshelf;
 pub mod chapter_list;
+pub mod conflict_dialog;
 pub mod reader;
 pub mod search;
 pub mod settings;
+pub mod sync_status;
 pub mod utils;
 pub use utils::render;

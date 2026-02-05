@@ -5,7 +5,7 @@ use ratatui::widgets::*;
 use crate::app::App;
 use crate::state::AppState;
 
-use super::{bookmark, bookshelf, chapter_list, reader, search, settings};
+use super::{bookmark, bookshelf, chapter_list, reader, search, settings, sync_status};
 
 pub fn render_help_info(f: &mut Frame, help_text: &str, area: Rect) {
     let help = Paragraph::new(help_text)
@@ -37,15 +37,16 @@ pub fn render_error_message(f: &mut Frame, error_msg: &str, area: Rect) {
     f.render_widget(error, error_area);
 }
 
-/// 主 UI 渲染函数
-///
-/// 根据应用状态渲染对应的界面，并处理错误消息显示。
-///
-/// # Arguments
-///
-/// * `f` - ratatui 框架的可变引用
-/// * `app` - 应用实例的引用
 pub fn render(f: &mut Frame, app: &App) {
+    let area = f.area();
+
+    let main_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(area);
+
+    let status_area = main_layout[1];
+
     match app.state {
         AppState::Bookshelf => bookshelf::render_bookshelf(f, app),
         AppState::Reading => reader::render_reader(f, app),
@@ -55,7 +56,40 @@ pub fn render(f: &mut Frame, app: &App) {
         AppState::BookmarkList | AppState::BookmarkAdd => bookmark::render_bookmark(f, app),
     }
 
+    let sync_widget = sync_status::SyncStatusWidget {
+        status: app.sync_status,
+    };
+    sync_widget.render(status_area, f.buffer_mut());
+
     if let Some(ref error_msg) = app.error_message {
-        render_error_message(f, error_msg, f.area());
+        render_error_message(f, error_msg, area);
     }
+
+    if app.show_conflict_dialog {
+        if let Some(ref dialog) = app.conflict_dialog {
+            let popup_area = centered_rect(50, 30, area);
+            f.render_widget(ratatui::widgets::Clear, popup_area);
+            f.render_widget(dialog, popup_area);
+        }
+    }
+}
+
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }
