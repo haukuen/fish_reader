@@ -259,6 +259,10 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
             app.detect_orphaned_novels();
             app.state = AppState::Settings;
         }
+        KeyCode::Char('w') | KeyCode::Char('W') => {
+            // 触发手动同步
+            app.trigger_sync();
+        }
         _ => {}
     }
 }
@@ -530,6 +534,7 @@ fn handle_settings_key(app: &mut App, key: KeyCode) {
         SettingsMode::MainMenu => handle_settings_main_menu_key(app, key),
         SettingsMode::DeleteNovel => handle_delete_novel_key(app, key),
         SettingsMode::DeleteOrphaned => handle_delete_orphaned_key(app, key),
+        SettingsMode::WebDavConfig => handle_webdav_config_key(app, key),
     }
 }
 
@@ -578,6 +583,15 @@ fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
                         // 进入删除孤立记录模式
                         app.settings.mode = SettingsMode::DeleteOrphaned;
                         app.detect_orphaned_novels();
+                    }
+                    2 => {
+                        // 进入WebDAV配置模式
+                        app.settings.mode = SettingsMode::WebDavConfig;
+                        // 初始化临时配置为当前配置
+                        app.settings.webdav_config_state.temp_config = app.webdav_config.clone();
+                        app.settings.webdav_config_state.selected_field = 0;
+                        app.settings.webdav_config_state.edit_mode = false;
+                        app.settings.webdav_config_state.show_password = false;
                     }
                     _ => {}
                 }
@@ -671,6 +685,91 @@ fn handle_delete_orphaned_key(app: &mut App, key: KeyCode) {
             }
         }
         _ => {}
+    }
+}
+
+/// 处理WebDAV配置界面的键盘事件
+fn handle_webdav_config_key(app: &mut App, key: KeyCode) {
+    use crate::state::SettingsMode;
+
+    let config_state = &mut app.settings.webdav_config_state;
+
+    if config_state.edit_mode {
+        // 编辑模式下的处理
+        match key {
+            KeyCode::Esc => {
+                config_state.edit_mode = false;
+            }
+            KeyCode::Enter => {
+                config_state.edit_mode = false;
+            }
+            KeyCode::Backspace => {
+                match config_state.selected_field {
+                    1 => { config_state.temp_config.url.pop(); }
+                    2 => { config_state.temp_config.username.pop(); }
+                    3 => { config_state.temp_config.password.pop(); }
+                    4 => { config_state.temp_config.remote_path.pop(); }
+                    _ => {}
+                }
+            }
+            KeyCode::Char(c) => {
+                match config_state.selected_field {
+                    1 => { config_state.temp_config.url.push(c); }
+                    2 => { config_state.temp_config.username.push(c); }
+                    3 => { config_state.temp_config.password.push(c); }
+                    4 => { config_state.temp_config.remote_path.push(c); }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    } else {
+        // 导航模式下的处理
+        match key {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
+                // 返回设置主菜单
+                app.settings.mode = SettingsMode::MainMenu;
+            }
+            KeyCode::Up => {
+                if config_state.selected_field > 0 {
+                    config_state.selected_field -= 1;
+                }
+            }
+            KeyCode::Down => {
+                if config_state.selected_field < 4 {
+                    config_state.selected_field += 1;
+                }
+            }
+            KeyCode::Tab => {
+                // 切换启用状态（只在第一个字段时）
+                if config_state.selected_field == 0 {
+                    config_state.temp_config.enabled = !config_state.temp_config.enabled;
+                }
+            }
+            KeyCode::Char('p') | KeyCode::Char('P') => {
+                // 切换密码显示
+                config_state.show_password = !config_state.show_password;
+            }
+            KeyCode::Enter => {
+                match config_state.selected_field {
+                    0 => {
+                        // 切换启用状态
+                        config_state.temp_config.enabled = !config_state.temp_config.enabled;
+                    }
+                    1..=4 => {
+                        // 进入编辑模式
+                        config_state.edit_mode = true;
+                    }
+                    _ => {}
+                }
+            }
+            KeyCode::Char('s') | KeyCode::Char('S') => {
+                // 保存配置
+                app.save_webdav_config();
+                app.settings.mode = SettingsMode::MainMenu;
+            }
+            _ => {}
+        }
     }
 }
 
