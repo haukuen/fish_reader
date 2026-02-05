@@ -32,7 +32,7 @@ impl AppConfig {
             backup_suffix: "backup",
             backup_timestamp_interval: 600, // 10分钟
             backup_retention_days: 3,
-            settings_menu_count: 2,
+            settings_menu_count: 3,
         }
     }
 }
