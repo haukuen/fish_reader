@@ -77,6 +77,8 @@ pub struct WebDavConfigState {
     pub edit_mode: bool,
     /// 是否显示密码（明文/密文）
     pub show_password: bool,
+    /// 连接测试结果 (None=未测试, Ok=成功, Err=失败原因)
+    pub connection_status: Option<Result<(), String>>,
 }
 
 impl SettingsState {

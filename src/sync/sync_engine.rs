@@ -1,9 +1,9 @@
 use crate::sync::config::WebDavConfig;
 use crate::sync::webdav_client::WebDavClient;
-use std::io::Write;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
-use zip::write::SimpleFileOptions;
 
 /// 同步进度消息
 pub enum SyncMessage {
@@ -16,6 +16,90 @@ pub enum SyncMessage {
     /// 操作失败
     Failed(String),
 }
+
+// ── 同步清单类型 ──────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncManifest {
+    pub version: u32,
+    pub last_sync: u64,
+    pub files: HashMap<String, FileEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileEntry {
+    pub hash: u32,
+    pub size: u64,
+    pub mtime: u64,
+}
+
+impl SyncManifest {
+    fn new() -> Self {
+        Self {
+            version: 1,
+            last_sync: 0,
+            files: HashMap::new(),
+        }
+    }
+}
+
+// ── 文件差异 ──────────────────────────────────────────────────
+
+enum DiffAction {
+    Upload(String),   // 新增或变更
+    Delete(String),   // 远程需要删除
+    Download(String), // 需要从远程下载
+}
+
+fn diff_for_upload(
+    local: &HashMap<String, FileEntry>,
+    remote: &HashMap<String, FileEntry>,
+) -> Vec<DiffAction> {
+    let mut actions = Vec::new();
+
+    // 新增 / 变更
+    for (path, local_entry) in local {
+        match remote.get(path) {
+            Some(remote_entry) if remote_entry.hash == local_entry.hash => {}
+            _ => actions.push(DiffAction::Upload(path.clone())),
+        }
+    }
+
+    // 远程有、本地无 → 删除
+    for path in remote.keys() {
+        if !local.contains_key(path) {
+            actions.push(DiffAction::Delete(path.clone()));
+        }
+    }
+
+    actions
+}
+
+fn diff_for_download(
+    local: &HashMap<String, FileEntry>,
+    remote: &HashMap<String, FileEntry>,
+) -> Vec<DiffAction> {
+    let mut actions = Vec::new();
+
+    // 远程新增 / 变更
+    for (path, remote_entry) in remote {
+        match local.get(path) {
+            Some(local_entry) if local_entry.hash == remote_entry.hash => {}
+            _ => actions.push(DiffAction::Download(path.clone())),
+        }
+    }
+
+    // 本地有、远程无 → 删除
+    for path in local.keys() {
+        if !remote.contains_key(path) {
+            actions.push(DiffAction::Delete(path.clone()));
+        }
+    }
+
+    actions
+}
+
+// ── SyncEngine ────────────────────────────────────────────────
 
 pub struct SyncEngine {
     client: WebDavClient,
@@ -45,185 +129,466 @@ impl SyncEngine {
         }
     }
 
-    fn do_sync_up(&self, tx: &Sender<SyncMessage>) -> anyhow::Result<()> {
-        let cache_dir = std::env::temp_dir().join("fish_reader");
-        std::fs::create_dir_all(&cache_dir)?;
+    // ── 路径辅助 ──────────────────────────────────────────
 
-        let filename = format!(
-            "{}.fish",
-            chrono::Local::now().format("%Y%m%d-%H%M%S")
-        );
-        let temp_file = cache_dir.join(&filename);
-
-        tx.send(SyncMessage::Progress("打包数据中...".into())).ok();
-        self.pack_data(&temp_file)?;
-
-        tx.send(SyncMessage::Progress(format!("上传 {}...", filename)))
-            .ok();
-        let remote_path = self.remote_file_path(&filename);
-        match self.client.upload(&temp_file, &remote_path) {
-            Ok(()) => {
-                std::fs::remove_file(&temp_file).ok();
-                tx.send(SyncMessage::Progress("清理旧版本...".into())).ok();
-                self.cleanup_old_versions().ok();
-                tx.send(SyncMessage::UploadComplete).ok();
-                Ok(())
-            }
-            Err(e) => {
-                std::fs::remove_file(&temp_file).ok();
-                Err(e)
-            }
-        }
+    fn data_dir() -> PathBuf {
+        home::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(".fish_reader")
     }
 
-    fn do_sync_down(&self, tx: &Sender<SyncMessage>) -> anyhow::Result<()> {
-        tx.send(SyncMessage::Progress("查询远程文件...".into())).ok();
-        let remote_files = self.list_remote_files()?;
-        let filename = self
-            .find_latest_file(&remote_files)
-            .ok_or_else(|| anyhow::anyhow!("远程没有同步数据"))?;
+    fn manifest_local_path() -> PathBuf {
+        Self::data_dir().join("sync_manifest.json")
+    }
 
-        let cache_dir = std::env::temp_dir().join("fish_reader");
-        std::fs::create_dir_all(&cache_dir)?;
+    fn remote_base(&self) -> String {
+        self.config.remote_path.trim_end_matches('/').to_string()
+    }
 
-        let temp_file = cache_dir.join(&filename);
-        let remote_path = self.remote_file_path(&filename);
+    fn remote_file_path(&self, filename: &str) -> String {
+        format!("{}/{}", self.remote_base(), filename)
+    }
 
-        tx.send(SyncMessage::Progress(format!("下载 {}...", filename)))
-            .ok();
-        self.client.download(&remote_path, &temp_file)?;
+    // ── 清单读写 ──────────────────────────────────────────
 
-        tx.send(SyncMessage::Progress("解压数据中...".into())).ok();
-        self.unpack_data(&temp_file)?;
+    fn load_local_manifest() -> SyncManifest {
+        let path = Self::manifest_local_path();
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(manifest) = serde_json::from_str(&content) {
+                    return manifest;
+                }
+            }
+        }
+        SyncManifest::new()
+    }
 
-        std::fs::remove_file(&temp_file).ok();
-        tx.send(SyncMessage::DownloadComplete).ok();
+    fn save_local_manifest(manifest: &SyncManifest) -> anyhow::Result<()> {
+        let path = Self::manifest_local_path();
+        let content = serde_json::to_string_pretty(manifest)?;
+        std::fs::write(path, content)?;
         Ok(())
     }
 
-    fn pack_data(&self, output_path: &Path) -> anyhow::Result<()> {
-        let file = std::fs::File::create(output_path)?;
-        let mut zip = zip::ZipWriter::new(file);
-        let options =
-            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    fn download_remote_manifest(&self) -> anyhow::Result<Option<SyncManifest>> {
+        let remote_path = self.remote_file_path("manifest.json");
+        match self.client.download_bytes(&remote_path) {
+            Ok(bytes) => {
+                let manifest: SyncManifest = serde_json::from_slice(&bytes)?;
+                Ok(Some(manifest))
+            }
+            Err(_) => Ok(None),
+        }
+    }
 
-        let data_dir = home::home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join(".fish_reader");
+    fn upload_manifest(&self, manifest: &SyncManifest) -> anyhow::Result<()> {
+        let remote_path = self.remote_file_path("manifest.json");
+        let data = serde_json::to_string_pretty(manifest)?;
+        self.client.upload_bytes(data.as_bytes(), &remote_path)
+    }
 
-        // Add novels directory
+    // ── 本地文件扫描 ──────────────────────────────────────
+
+    /// 扫描本地文件，构建清单。mtime 未变时复用旧哈希避免读取大文件。
+    fn scan_local_files(old_manifest: &SyncManifest) -> anyhow::Result<HashMap<String, FileEntry>> {
+        let data_dir = Self::data_dir();
+        let mut files = HashMap::new();
+
+        // 扫描 novels 目录
         let novels_dir = data_dir.join("novels");
         if novels_dir.exists() {
             for entry in walkdir::WalkDir::new(&novels_dir) {
                 let entry = entry?;
                 let path = entry.path();
                 if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("txt") {
-                    let relative_path = path.strip_prefix(&data_dir)?;
-                    zip.start_file(relative_path.to_string_lossy(), options)?;
+                    let relative = path.strip_prefix(&data_dir)?;
+                    let key = relative.to_string_lossy().replace('\\', "/");
+                    let meta = std::fs::metadata(path)?;
+                    let mtime = meta
+                        .modified()?
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_secs();
+                    let size = meta.len();
+
+                    // mtime + size 未变时复用旧哈希
+                    if let Some(old) = old_manifest.files.get(&key) {
+                        if old.mtime == mtime && old.size == size {
+                            files.insert(key, old.clone());
+                            continue;
+                        }
+                    }
+
                     let contents = std::fs::read(path)?;
-                    zip.write_all(&contents)?;
+                    let hash = crc32fast::hash(&contents);
+                    files.insert(key, FileEntry { hash, size, mtime });
                 }
             }
         }
 
-        // Add progress.json
-        let progress_file = data_dir.join("progress.json");
-        if progress_file.exists() {
-            zip.start_file("progress.json", options)?;
-            let contents = std::fs::read(&progress_file)?;
-            zip.write_all(&contents)?;
-        }
+        // progress.json
+        let progress_path = data_dir.join("progress.json");
+        if progress_path.exists() {
+            let meta = std::fs::metadata(&progress_path)?;
+            let mtime = meta
+                .modified()?
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_secs();
+            let size = meta.len();
 
-        zip.finish()?;
-        Ok(())
-    }
-
-    fn unpack_data(&self, zip_path: &Path) -> anyhow::Result<()> {
-        let file = std::fs::File::open(zip_path)?;
-        let mut archive = zip::ZipArchive::new(file)?;
-
-        let data_dir = home::home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join(".fish_reader");
-
-        for i in 0..archive.len() {
-            let mut file = archive.by_index(i)?;
-
-            // 路径穿越保护：使用 enclosed_name() 防止 Zip Slip 攻击
-            let Some(enclosed) = file.enclosed_name() else {
-                continue;
-            };
-            let outpath = data_dir.join(enclosed);
-
-            if file.is_dir() {
-                std::fs::create_dir_all(&outpath)?;
+            let key = "progress.json".to_string();
+            if let Some(old) = old_manifest.files.get(&key) {
+                if old.mtime == mtime && old.size == size {
+                    files.insert(key, old.clone());
+                } else {
+                    let contents = std::fs::read(&progress_path)?;
+                    let hash = crc32fast::hash(&contents);
+                    files.insert(key, FileEntry { hash, size, mtime });
+                }
             } else {
-                if let Some(parent) = outpath.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                let mut outfile = std::fs::File::create(&outpath)?;
-                std::io::copy(&mut file, &mut outfile)?;
+                let contents = std::fs::read(&progress_path)?;
+                let hash = crc32fast::hash(&contents);
+                files.insert(key, FileEntry { hash, size, mtime });
             }
         }
+
+        Ok(files)
+    }
+
+    // ── 增量上传 ──────────────────────────────────────────
+
+    fn do_sync_up(&self, tx: &Sender<SyncMessage>) -> anyhow::Result<()> {
+        let data_dir = Self::data_dir();
+
+        // 1. 扫描本地
+        tx.send(SyncMessage::Progress("扫描本地文件...".into()))
+            .ok();
+        let old_manifest = Self::load_local_manifest();
+        let local_files = Self::scan_local_files(&old_manifest)?;
+
+        // 3. 获取远程清单
+        let remote_manifest = self.download_remote_manifest()?.unwrap_or_else(SyncManifest::new);
+
+        // 4. 对比
+        let actions = diff_for_upload(&local_files, &remote_manifest.files);
+        if actions.is_empty() {
+            tx.send(SyncMessage::Progress("没有需要同步的变更".into()))
+                .ok();
+            tx.send(SyncMessage::UploadComplete).ok();
+            return Ok(());
+        }
+
+        // 5. 确保远程目录
+        let base = self.remote_base();
+        self.client.mkcol(&format!("{}/", base))?;
+        self.client
+            .mkcol(&format!("{}/novels/", base))?;
+
+        // 6. 执行上传/删除
+        let total = actions.len();
+        for (i, action) in actions.iter().enumerate() {
+            match action {
+                DiffAction::Upload(rel_path) => {
+                    let display_name = Path::new(rel_path)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy();
+                    tx.send(SyncMessage::Progress(format!(
+                        "上传 ({}/{}) {}...",
+                        i + 1,
+                        total,
+                        display_name
+                    )))
+                    .ok();
+                    let local_path = data_dir.join(rel_path);
+                    let contents = std::fs::read(&local_path)?;
+                    let remote_path = self.remote_file_path(rel_path);
+                    self.client.upload_bytes(&contents, &remote_path)?;
+                }
+                DiffAction::Delete(rel_path) => {
+                    let display_name = Path::new(rel_path)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy();
+                    tx.send(SyncMessage::Progress(format!(
+                        "删除 ({}/{}) {}...",
+                        i + 1,
+                        total,
+                        display_name
+                    )))
+                    .ok();
+                    let remote_path = self.remote_file_path(rel_path);
+                    self.client.delete(&remote_path)?;
+                }
+                DiffAction::Download(_) => {}
+            }
+        }
+
+        // 7. 上传清单（最后，保证原子性）
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs();
+        let new_manifest = SyncManifest {
+            version: 1,
+            last_sync: now,
+            files: local_files,
+        };
+        self.upload_manifest(&new_manifest)?;
+        Self::save_local_manifest(&new_manifest)?;
+
+        tx.send(SyncMessage::UploadComplete).ok();
+        Ok(())
+    }
+
+    // ── 增量下载 ──────────────────────────────────────────
+
+    fn do_sync_down(&self, tx: &Sender<SyncMessage>) -> anyhow::Result<()> {
+        let data_dir = Self::data_dir();
+
+        // 1. 下载远程清单
+        tx.send(SyncMessage::Progress("获取远程清单...".into()))
+            .ok();
+        let remote_manifest = self
+            .download_remote_manifest()?
+            .ok_or_else(|| anyhow::anyhow!("远程没有同步数据"))?;
+
+        // 3. 扫描实际本地文件状态再对比（而非依赖旧清单，否则本地删除文件后无法重新下载）
+        let old_manifest = Self::load_local_manifest();
+        let local_files = Self::scan_local_files(&old_manifest)?;
+        let actions = diff_for_download(&local_files, &remote_manifest.files);
+
+        if actions.is_empty() {
+            tx.send(SyncMessage::Progress("没有需要同步的变更".into()))
+                .ok();
+            tx.send(SyncMessage::DownloadComplete).ok();
+            return Ok(());
+        }
+
+        // 4. 执行下载/删除
+        let total = actions.len();
+        let mut downloaded_progress = false;
+        for (i, action) in actions.iter().enumerate() {
+            match action {
+                DiffAction::Download(rel_path) => {
+                    let display_name = Path::new(rel_path)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy();
+                    tx.send(SyncMessage::Progress(format!(
+                        "下载 ({}/{}) {}...",
+                        i + 1,
+                        total,
+                        display_name
+                    )))
+                    .ok();
+
+                    let remote_path = self.remote_file_path(rel_path);
+                    let bytes = self.client.download_bytes(&remote_path)?;
+
+                    if rel_path == "progress.json" {
+                        // 合并 progress.json
+                        Self::merge_progress(&data_dir, &bytes)?;
+                        downloaded_progress = true;
+                    } else {
+                        let local_path = data_dir.join(rel_path);
+                        if let Some(parent) = local_path.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        std::fs::write(&local_path, &bytes)?;
+                    }
+                }
+                DiffAction::Delete(rel_path) => {
+                    let display_name = Path::new(rel_path)
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy();
+                    tx.send(SyncMessage::Progress(format!(
+                        "删除 ({}/{}) {}...",
+                        i + 1,
+                        total,
+                        display_name
+                    )))
+                    .ok();
+                    let local_path = data_dir.join(rel_path);
+                    std::fs::remove_file(&local_path).ok();
+                }
+                DiffAction::Upload(_) => {}
+            }
+        }
+
+        // 5. 保存远程清单为本地清单
+        // 如果合并了 progress.json，需要重新计算其哈希
+        let mut final_manifest = remote_manifest;
+        if downloaded_progress {
+            let progress_path = data_dir.join("progress.json");
+            if progress_path.exists() {
+                let contents = std::fs::read(&progress_path)?;
+                let meta = std::fs::metadata(&progress_path)?;
+                let mtime = meta
+                    .modified()?
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_secs();
+                final_manifest.files.insert(
+                    "progress.json".to_string(),
+                    FileEntry {
+                        hash: crc32fast::hash(&contents),
+                        size: meta.len(),
+                        mtime,
+                    },
+                );
+            }
+        }
+        Self::save_local_manifest(&final_manifest)?;
+
+        tx.send(SyncMessage::DownloadComplete).ok();
+        Ok(())
+    }
+
+    // ── progress.json 合并 ────────────────────────────────
+
+    /// 合并远程 progress.json 与本地：取较大的 scroll_offset，书签取并集
+    fn merge_progress(data_dir: &Path, remote_bytes: &[u8]) -> anyhow::Result<()> {
+        let progress_path = data_dir.join("progress.json");
+
+        // 解析远程
+        let remote: serde_json::Value = serde_json::from_slice(remote_bytes)?;
+
+        // 如果本地不存在，直接写入远程
+        if !progress_path.exists() {
+            std::fs::write(&progress_path, remote_bytes)?;
+            return Ok(());
+        }
+
+        // 解析本地
+        let local_content = std::fs::read_to_string(&progress_path)?;
+        let local: serde_json::Value = serde_json::from_str(&local_content)?;
+
+        let merged = Self::merge_library_json(&local, &remote);
+        let output = serde_json::to_string_pretty(&merged)?;
+        std::fs::write(&progress_path, output)?;
 
         Ok(())
     }
 
-    fn list_remote_files(&self) -> anyhow::Result<Vec<crate::sync::webdav_client::DavResource>> {
-        self.client.list(&self.config.remote_path)
-    }
+    /// 按小说合并 Library JSON：取较大 scroll_offset，书签取并集
+    fn merge_library_json(
+        local: &serde_json::Value,
+        remote: &serde_json::Value,
+    ) -> serde_json::Value {
+        let empty_arr = serde_json::Value::Array(vec![]);
 
-    /// 按文件名排序找到最新的 .fish 文件（YYYYMMDD-HHMMSS 格式天然支持字典序排序）
-    fn find_latest_file(
-        &self,
-        files: &[crate::sync::webdav_client::DavResource],
-    ) -> Option<String> {
-        files
-            .iter()
-            .filter_map(|f| {
-                let filename = Path::new(&f.path).file_name()?.to_str()?.to_string();
-                if filename.ends_with(".fish") {
-                    Some(filename)
-                } else {
-                    None
-                }
-            })
-            .max()
-    }
+        let local_novels = local
+            .get("novels")
+            .unwrap_or(&empty_arr)
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let remote_novels = remote
+            .get("novels")
+            .unwrap_or(&empty_arr)
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
 
-    /// 构造远程文件路径：remote_path + filename
-    fn remote_file_path(&self, filename: &str) -> String {
-        format!(
-            "{}/{}",
-            self.config.remote_path.trim_end_matches('/'),
-            filename
-        )
-    }
-
-    fn cleanup_old_versions(&self) -> anyhow::Result<()> {
-        let files = self.list_remote_files()?;
-        let mut fish_files: Vec<String> = files
-            .iter()
-            .filter_map(|f| {
-                let filename = Path::new(&f.path).file_name()?.to_str()?.to_string();
-                if filename.ends_with(".fish") {
-                    Some(filename)
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        fish_files.sort();
-
-        while fish_files.len() > 10 {
-            if let Some(filename) = fish_files.first() {
-                let remote_path = self.remote_file_path(filename);
-                self.client.delete(&remote_path)?;
-                fish_files.remove(0);
+        // 用 title 做 key 建索引
+        let mut local_map: HashMap<String, serde_json::Value> = HashMap::new();
+        for novel in &local_novels {
+            if let Some(title) = novel.get("title").and_then(|t| t.as_str()) {
+                local_map.insert(title.to_string(), novel.clone());
             }
         }
 
-        Ok(())
+        let mut merged_novels: Vec<serde_json::Value> = Vec::new();
+        let mut seen_titles: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
+        // 先处理远程小说
+        for remote_novel in &remote_novels {
+            let title = remote_novel
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            seen_titles.insert(title.clone());
+
+            if let Some(local_novel) = local_map.get(&title) {
+                merged_novels.push(Self::merge_novel(local_novel, remote_novel));
+            } else {
+                merged_novels.push(remote_novel.clone());
+            }
+        }
+
+        // 添加只在本地存在的小说
+        for local_novel in &local_novels {
+            let title = local_novel
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            if !seen_titles.contains(&title) {
+                merged_novels.push(local_novel.clone());
+            }
+        }
+
+        serde_json::json!({ "novels": merged_novels })
     }
+
+    fn merge_novel(
+        local: &serde_json::Value,
+        remote: &serde_json::Value,
+    ) -> serde_json::Value {
+        let mut merged = remote.clone();
+
+        // 取较大的 scroll_offset
+        let local_offset = local
+            .get("progress")
+            .and_then(|p| p.get("scroll_offset"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let remote_offset = remote
+            .get("progress")
+            .and_then(|p| p.get("scroll_offset"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let max_offset = local_offset.max(remote_offset);
+
+        // 书签取并集（按 position 去重）
+        let empty_arr = serde_json::Value::Array(vec![]);
+        let local_bookmarks = local
+            .get("progress")
+            .and_then(|p| p.get("bookmarks"))
+            .unwrap_or(&empty_arr)
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let remote_bookmarks = remote
+            .get("progress")
+            .and_then(|p| p.get("bookmarks"))
+            .unwrap_or(&empty_arr)
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+
+        let mut seen_positions: std::collections::HashSet<u64> =
+            std::collections::HashSet::new();
+        let mut merged_bookmarks: Vec<serde_json::Value> = Vec::new();
+
+        for bm in remote_bookmarks.iter().chain(local_bookmarks.iter()) {
+            let pos = bm.get("position").and_then(|p| p.as_u64()).unwrap_or(0);
+            if seen_positions.insert(pos) {
+                merged_bookmarks.push(bm.clone());
+            }
+        }
+        merged_bookmarks.sort_by_key(|bm| {
+            bm.get("position").and_then(|p| p.as_u64()).unwrap_or(0)
+        });
+
+        // 构建合并后的 progress
+        if let Some(progress) = merged.get_mut("progress") {
+            progress["scroll_offset"] = serde_json::json!(max_offset);
+            progress["bookmarks"] = serde_json::json!(merged_bookmarks);
+        }
+
+        merged
+    }
+
 }

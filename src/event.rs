@@ -702,6 +702,7 @@ fn handle_delete_orphaned_key(app: &mut App, key: KeyCode) {
 /// 处理WebDAV配置界面的键盘事件
 fn handle_webdav_config_key(app: &mut App, key: KeyCode) {
     use crate::state::SettingsMode;
+    use crate::sync::webdav_client::WebDavClient;
 
     let config_state = &mut app.settings.webdav_config_state;
 
@@ -778,6 +779,18 @@ fn handle_webdav_config_key(app: &mut App, key: KeyCode) {
                 // 保存配置
                 app.save_webdav_config();
                 app.settings.mode = SettingsMode::MainMenu;
+            }
+            KeyCode::Char('t') | KeyCode::Char('T') => {
+                // 测试连接
+                let temp_config = &app.settings.webdav_config_state.temp_config;
+                let result = match WebDavClient::new(temp_config) {
+                    Ok(client) => match client.test_connection(&temp_config.remote_path) {
+                        Ok(()) => Ok(()),
+                        Err(e) => Err(e.to_string()),
+                    },
+                    Err(e) => Err(e.to_string()),
+                };
+                app.settings.webdav_config_state.connection_status = Some(result);
             }
             _ => {}
         }

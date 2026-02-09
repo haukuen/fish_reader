@@ -313,6 +313,25 @@ fn render_webdav_config(f: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(Color::Gray),
     )));
 
+    // 显示连接测试结果
+    match &config_state.connection_status {
+        Some(Ok(())) => {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                "✓ 连接成功",
+                Style::default().fg(Color::Green),
+            )));
+        }
+        Some(Err(msg)) => {
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled(
+                format!("✗ 连接失败: {}", msg),
+                Style::default().fg(Color::Red),
+            )));
+        }
+        None => {}
+    }
+
     let config_text = Text::from(lines);
     let config_paragraph = Paragraph::new(config_text)
         .block(Block::default().borders(Borders::ALL).title("配置"))
@@ -330,7 +349,7 @@ fn render_webdav_config(f: &mut Frame, app: &App, area: Rect) {
     let help_text = if edit_mode {
         "输入文本 | Enter: 确认 | Esc: 取消编辑"
     } else {
-        "↑/↓: 选择字段 | Enter: 编辑/保存 | Tab: 切换启用 | P: 切换密码显示 | Esc: 返回"
+        "↑/↓: 选择字段 | Enter: 编辑 | Tab: 切换启用 | S: 保存 | T: 测试连接 | P: 切换密码显示 | Esc: 返回"
     };
     render_help_info(f, help_text, area);
 }
