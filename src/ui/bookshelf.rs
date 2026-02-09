@@ -7,7 +7,6 @@ use crate::app::App;
 pub fn render_bookshelf(f: &mut Frame, app: &App) {
     let area = f.area();
 
-    // 创建书架标题
     let title = Paragraph::new("书架")
         .style(Style::default().fg(Color::Cyan))
         .alignment(Alignment::Center);
@@ -21,7 +20,6 @@ pub fn render_bookshelf(f: &mut Frame, app: &App) {
 
     f.render_widget(title, title_area);
 
-    // 创建小说列表
     let items: Vec<ListItem> = app
         .novels
         .iter()
@@ -54,7 +52,6 @@ pub fn render_bookshelf(f: &mut Frame, app: &App) {
 
     f.render_stateful_widget(novels_list, list_area, &mut state);
 
-    // 创建帮助信息
     let help_text = "↑/k: 上移  ↓/j: 下移  Enter: 选择  s: 设置  w: 上传  d: 下载  Esc/q: 退出";
     render_help_info(f, help_text, area);
 }

@@ -17,8 +17,6 @@ pub enum SyncMessage {
     Failed(String),
 }
 
-// ── 同步清单类型 ──────────────────────────────────────────────
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncManifest {
     pub version: u32,
@@ -43,12 +41,10 @@ impl SyncManifest {
     }
 }
 
-// ── 文件差异 ──────────────────────────────────────────────────
-
 enum DiffAction {
-    Upload(String),   // 新增或变更
-    Delete(String),   // 远程需要删除
-    Download(String), // 需要从远程下载
+    Upload(String),
+    Delete(String),
+    Download(String),
 }
 
 fn diff_for_upload(
@@ -57,7 +53,6 @@ fn diff_for_upload(
 ) -> Vec<DiffAction> {
     let mut actions = Vec::new();
 
-    // 新增 / 变更
     for (path, local_entry) in local {
         match remote.get(path) {
             Some(remote_entry) if remote_entry.hash == local_entry.hash => {}
@@ -65,7 +60,6 @@ fn diff_for_upload(
         }
     }
 
-    // 远程有、本地无 → 删除
     for path in remote.keys() {
         if !local.contains_key(path) {
             actions.push(DiffAction::Delete(path.clone()));
@@ -81,7 +75,6 @@ fn diff_for_download(
 ) -> Vec<DiffAction> {
     let mut actions = Vec::new();
 
-    // 远程新增 / 变更
     for (path, remote_entry) in remote {
         match local.get(path) {
             Some(local_entry) if local_entry.hash == remote_entry.hash => {}
@@ -89,7 +82,6 @@ fn diff_for_download(
         }
     }
 
-    // 本地有、远程无 → 删除
     for path in local.keys() {
         if !remote.contains_key(path) {
             actions.push(DiffAction::Delete(path.clone()));
@@ -98,8 +90,6 @@ fn diff_for_download(
 
     actions
 }
-
-// ── SyncEngine ────────────────────────────────────────────────
 
 pub struct SyncEngine {
     client: WebDavClient,
@@ -129,8 +119,6 @@ impl SyncEngine {
         }
     }
 
-    // ── 路径辅助 ──────────────────────────────────────────
-
     fn data_dir() -> PathBuf {
         home::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
@@ -148,8 +136,6 @@ impl SyncEngine {
     fn remote_file_path(&self, filename: &str) -> String {
         format!("{}/{}", self.remote_base(), filename)
     }
-
-    // ── 清单读写 ──────────────────────────────────────────
 
     fn load_local_manifest() -> SyncManifest {
         let path = Self::manifest_local_path();
@@ -187,14 +173,11 @@ impl SyncEngine {
         self.client.upload_bytes(data.as_bytes(), &remote_path)
     }
 
-    // ── 本地文件扫描 ──────────────────────────────────────
-
     /// 扫描本地文件，构建清单。mtime 未变时复用旧哈希避免读取大文件。
     fn scan_local_files(old_manifest: &SyncManifest) -> anyhow::Result<HashMap<String, FileEntry>> {
         let data_dir = Self::data_dir();
         let mut files = HashMap::new();
 
-        // 扫描 novels 目录
         let novels_dir = data_dir.join("novels");
         if novels_dir.exists() {
             for entry in walkdir::WalkDir::new(&novels_dir) {
@@ -210,7 +193,6 @@ impl SyncEngine {
                         .as_secs();
                     let size = meta.len();
 
-                    // mtime + size 未变时复用旧哈希
                     if let Some(old) = old_manifest.files.get(&key) {
                         if old.mtime == mtime && old.size == size {
                             files.insert(key, old.clone());
@@ -225,7 +207,6 @@ impl SyncEngine {
             }
         }
 
-        // progress.json
         let progress_path = data_dir.join("progress.json");
         if progress_path.exists() {
             let meta = std::fs::metadata(&progress_path)?;
@@ -254,21 +235,18 @@ impl SyncEngine {
         Ok(files)
     }
 
-    // ── 增量上传 ──────────────────────────────────────────
-
     fn do_sync_up(&self, tx: &Sender<SyncMessage>) -> anyhow::Result<()> {
         let data_dir = Self::data_dir();
 
-        // 1. 扫描本地
         tx.send(SyncMessage::Progress("扫描本地文件...".into()))
             .ok();
         let old_manifest = Self::load_local_manifest();
         let local_files = Self::scan_local_files(&old_manifest)?;
 
-        // 3. 获取远程清单
-        let remote_manifest = self.download_remote_manifest()?.unwrap_or_else(SyncManifest::new);
+        let remote_manifest = self
+            .download_remote_manifest()?
+            .unwrap_or_else(SyncManifest::new);
 
-        // 4. 对比
         let actions = diff_for_upload(&local_files, &remote_manifest.files);
         if actions.is_empty() {
             tx.send(SyncMessage::Progress("没有需要同步的变更".into()))
@@ -277,13 +255,10 @@ impl SyncEngine {
             return Ok(());
         }
 
-        // 5. 确保远程目录
         let base = self.remote_base();
         self.client.mkcol(&format!("{}/", base))?;
-        self.client
-            .mkcol(&format!("{}/novels/", base))?;
+        self.client.mkcol(&format!("{}/novels/", base))?;
 
-        // 6. 执行上传/删除
         let total = actions.len();
         for (i, action) in actions.iter().enumerate() {
             match action {
@@ -323,7 +298,6 @@ impl SyncEngine {
             }
         }
 
-        // 7. 上传清单（最后，保证原子性）
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs();
@@ -339,19 +313,15 @@ impl SyncEngine {
         Ok(())
     }
 
-    // ── 增量下载 ──────────────────────────────────────────
-
     fn do_sync_down(&self, tx: &Sender<SyncMessage>) -> anyhow::Result<()> {
         let data_dir = Self::data_dir();
 
-        // 1. 下载远程清单
         tx.send(SyncMessage::Progress("获取远程清单...".into()))
             .ok();
         let remote_manifest = self
             .download_remote_manifest()?
             .ok_or_else(|| anyhow::anyhow!("远程没有同步数据"))?;
 
-        // 3. 扫描实际本地文件状态再对比（而非依赖旧清单，否则本地删除文件后无法重新下载）
         let old_manifest = Self::load_local_manifest();
         let local_files = Self::scan_local_files(&old_manifest)?;
         let actions = diff_for_download(&local_files, &remote_manifest.files);
@@ -363,7 +333,6 @@ impl SyncEngine {
             return Ok(());
         }
 
-        // 4. 执行下载/删除
         let total = actions.len();
         let mut downloaded_progress = false;
         for (i, action) in actions.iter().enumerate() {
@@ -385,7 +354,6 @@ impl SyncEngine {
                     let bytes = self.client.download_bytes(&remote_path)?;
 
                     if rel_path == "progress.json" {
-                        // 合并 progress.json
                         Self::merge_progress(&data_dir, &bytes)?;
                         downloaded_progress = true;
                     } else {
@@ -415,8 +383,6 @@ impl SyncEngine {
             }
         }
 
-        // 5. 保存远程清单为本地清单
-        // 如果合并了 progress.json，需要重新计算其哈希
         let mut final_manifest = remote_manifest;
         if downloaded_progress {
             let progress_path = data_dir.join("progress.json");
@@ -443,22 +409,17 @@ impl SyncEngine {
         Ok(())
     }
 
-    // ── progress.json 合并 ────────────────────────────────
-
     /// 合并远程 progress.json 与本地：取较大的 scroll_offset，书签取并集
     fn merge_progress(data_dir: &Path, remote_bytes: &[u8]) -> anyhow::Result<()> {
         let progress_path = data_dir.join("progress.json");
 
-        // 解析远程
         let remote: serde_json::Value = serde_json::from_slice(remote_bytes)?;
 
-        // 如果本地不存在，直接写入远程
         if !progress_path.exists() {
             std::fs::write(&progress_path, remote_bytes)?;
             return Ok(());
         }
 
-        // 解析本地
         let local_content = std::fs::read_to_string(&progress_path)?;
         let local: serde_json::Value = serde_json::from_str(&local_content)?;
 
@@ -489,7 +450,6 @@ impl SyncEngine {
             .cloned()
             .unwrap_or_default();
 
-        // 用 title 做 key 建索引
         let mut local_map: HashMap<String, serde_json::Value> = HashMap::new();
         for novel in &local_novels {
             if let Some(title) = novel.get("title").and_then(|t| t.as_str()) {
@@ -498,10 +458,8 @@ impl SyncEngine {
         }
 
         let mut merged_novels: Vec<serde_json::Value> = Vec::new();
-        let mut seen_titles: std::collections::HashSet<String> =
-            std::collections::HashSet::new();
+        let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-        // 先处理远程小说
         for remote_novel in &remote_novels {
             let title = remote_novel
                 .get("title")
@@ -517,7 +475,6 @@ impl SyncEngine {
             }
         }
 
-        // 添加只在本地存在的小说
         for local_novel in &local_novels {
             let title = local_novel
                 .get("title")
@@ -532,13 +489,9 @@ impl SyncEngine {
         serde_json::json!({ "novels": merged_novels })
     }
 
-    fn merge_novel(
-        local: &serde_json::Value,
-        remote: &serde_json::Value,
-    ) -> serde_json::Value {
+    fn merge_novel(local: &serde_json::Value, remote: &serde_json::Value) -> serde_json::Value {
         let mut merged = remote.clone();
 
-        // 取较大的 scroll_offset
         let local_offset = local
             .get("progress")
             .and_then(|p| p.get("scroll_offset"))
@@ -551,7 +504,6 @@ impl SyncEngine {
             .unwrap_or(0);
         let max_offset = local_offset.max(remote_offset);
 
-        // 书签取并集（按 position 去重）
         let empty_arr = serde_json::Value::Array(vec![]);
         let local_bookmarks = local
             .get("progress")
@@ -568,8 +520,7 @@ impl SyncEngine {
             .cloned()
             .unwrap_or_default();
 
-        let mut seen_positions: std::collections::HashSet<u64> =
-            std::collections::HashSet::new();
+        let mut seen_positions: std::collections::HashSet<u64> = std::collections::HashSet::new();
         let mut merged_bookmarks: Vec<serde_json::Value> = Vec::new();
 
         for bm in remote_bookmarks.iter().chain(local_bookmarks.iter()) {
@@ -578,11 +529,8 @@ impl SyncEngine {
                 merged_bookmarks.push(bm.clone());
             }
         }
-        merged_bookmarks.sort_by_key(|bm| {
-            bm.get("position").and_then(|p| p.as_u64()).unwrap_or(0)
-        });
+        merged_bookmarks.sort_by_key(|bm| bm.get("position").and_then(|p| p.as_u64()).unwrap_or(0));
 
-        // 构建合并后的 progress
         if let Some(progress) = merged.get_mut("progress") {
             progress["scroll_offset"] = serde_json::json!(max_offset);
             progress["bookmarks"] = serde_json::json!(merged_bookmarks);
@@ -590,5 +538,152 @@ impl SyncEngine {
 
         merged
     }
+}
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(hash: u32) -> FileEntry {
+        FileEntry {
+            hash,
+            size: 1,
+            mtime: 1,
+        }
+    }
+
+    #[test]
+    fn test_diff_for_upload_detects_upload_and_delete() {
+        let mut local = HashMap::new();
+        local.insert("novels/same.txt".to_string(), entry(10));
+        local.insert("novels/changed.txt".to_string(), entry(20));
+        local.insert("progress.json".to_string(), entry(30));
+
+        let mut remote = HashMap::new();
+        remote.insert("novels/same.txt".to_string(), entry(10));
+        remote.insert("novels/changed.txt".to_string(), entry(99));
+        remote.insert("novels/removed.txt".to_string(), entry(40));
+
+        let actions = diff_for_upload(&local, &remote);
+        let mut uploads = Vec::new();
+        let mut deletes = Vec::new();
+
+        for action in actions {
+            match action {
+                DiffAction::Upload(path) => uploads.push(path),
+                DiffAction::Delete(path) => deletes.push(path),
+                DiffAction::Download(_) => panic!("unexpected download action"),
+            }
+        }
+
+        uploads.sort();
+        deletes.sort();
+        assert_eq!(
+            uploads,
+            vec![
+                "novels/changed.txt".to_string(),
+                "progress.json".to_string()
+            ]
+        );
+        assert_eq!(deletes, vec!["novels/removed.txt".to_string()]);
+    }
+
+    #[test]
+    fn test_diff_for_download_detects_download_and_delete() {
+        let mut local = HashMap::new();
+        local.insert("novels/same.txt".to_string(), entry(10));
+        local.insert("novels/changed.txt".to_string(), entry(20));
+        local.insert("novels/local_only.txt".to_string(), entry(30));
+
+        let mut remote = HashMap::new();
+        remote.insert("novels/same.txt".to_string(), entry(10));
+        remote.insert("novels/changed.txt".to_string(), entry(99));
+        remote.insert("progress.json".to_string(), entry(40));
+
+        let actions = diff_for_download(&local, &remote);
+        let mut downloads = Vec::new();
+        let mut deletes = Vec::new();
+
+        for action in actions {
+            match action {
+                DiffAction::Download(path) => downloads.push(path),
+                DiffAction::Delete(path) => deletes.push(path),
+                DiffAction::Upload(_) => panic!("unexpected upload action"),
+            }
+        }
+
+        downloads.sort();
+        deletes.sort();
+        assert_eq!(
+            downloads,
+            vec![
+                "novels/changed.txt".to_string(),
+                "progress.json".to_string()
+            ]
+        );
+        assert_eq!(deletes, vec!["novels/local_only.txt".to_string()]);
+    }
+
+    #[test]
+    fn test_merge_novel_uses_max_offset_and_dedup_bookmarks() {
+        let local = serde_json::json!({
+            "title": "A",
+            "progress": {
+                "scroll_offset": 200,
+                "bookmarks": [
+                    {"name": "l10", "position": 10, "timestamp": 1},
+                    {"name": "l20", "position": 20, "timestamp": 2}
+                ]
+            }
+        });
+        let remote = serde_json::json!({
+            "title": "A",
+            "progress": {
+                "scroll_offset": 100,
+                "bookmarks": [
+                    {"name": "r10", "position": 10, "timestamp": 9},
+                    {"name": "r30", "position": 30, "timestamp": 3}
+                ]
+            }
+        });
+
+        let merged = SyncEngine::merge_novel(&local, &remote);
+        assert_eq!(merged["progress"]["scroll_offset"].as_u64().unwrap(), 200);
+
+        let bookmarks = merged["progress"]["bookmarks"].as_array().unwrap();
+        let positions: Vec<u64> = bookmarks
+            .iter()
+            .map(|b| b["position"].as_u64().unwrap())
+            .collect();
+        assert_eq!(positions, vec![10, 20, 30]);
+        assert_eq!(bookmarks[0]["name"].as_str().unwrap(), "r10");
+    }
+
+    #[test]
+    fn test_merge_library_json_merges_common_and_keeps_unique() {
+        let local = serde_json::json!({
+            "novels": [
+                {"title": "A", "progress": {"scroll_offset": 8, "bookmarks": []}},
+                {"title": "L-only", "progress": {"scroll_offset": 1, "bookmarks": []}}
+            ]
+        });
+        let remote = serde_json::json!({
+            "novels": [
+                {"title": "A", "progress": {"scroll_offset": 5, "bookmarks": []}},
+                {"title": "R-only", "progress": {"scroll_offset": 2, "bookmarks": []}}
+            ]
+        });
+
+        let merged = SyncEngine::merge_library_json(&local, &remote);
+        let novels = merged["novels"].as_array().unwrap();
+        assert_eq!(novels.len(), 3);
+
+        let a = novels
+            .iter()
+            .find(|n| n["title"].as_str() == Some("A"))
+            .unwrap();
+        assert_eq!(a["progress"]["scroll_offset"].as_u64().unwrap(), 8);
+        assert!(novels.iter().any(|n| n["title"].as_str() == Some("L-only")));
+        assert!(novels.iter().any(|n| n["title"].as_str() == Some("R-only")));
+    }
 }

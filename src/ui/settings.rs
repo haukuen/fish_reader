@@ -19,7 +19,6 @@ pub fn render_settings(f: &mut Frame, app: &App) {
 
 /// 渲染设置主菜单
 fn render_settings_main_menu(f: &mut Frame, app: &App, area: Rect) {
-    // 创建设置页面标题
     let title = Paragraph::new("设置")
         .style(Style::default().fg(Color::Magenta))
         .alignment(Alignment::Center);
@@ -33,7 +32,6 @@ fn render_settings_main_menu(f: &mut Frame, app: &App, area: Rect) {
 
     f.render_widget(title, title_area);
 
-    // 创建菜单选项
     let menu_options = ["删除小说", "清理孤立记录", "WebDAV同步配置"];
     let items: Vec<ListItem> = menu_options
         .iter()
@@ -66,14 +64,12 @@ fn render_settings_main_menu(f: &mut Frame, app: &App, area: Rect) {
 
     f.render_stateful_widget(menu_list, list_area, &mut state);
 
-    // 创建帮助信息
     let help_text = "↑/↓: 选择选项 | Enter: 确认 | Esc/q: 返回书架";
     render_help_info(f, help_text, area);
 }
 
 /// 渲染删除小说菜单
 fn render_delete_novel_menu(f: &mut Frame, app: &App, area: Rect) {
-    // 创建标题
     let title = Paragraph::new("删除小说")
         .style(Style::default().fg(Color::Red))
         .alignment(Alignment::Center);
@@ -88,7 +84,6 @@ fn render_delete_novel_menu(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(title, title_area);
 
     if app.novels.is_empty() {
-        // 没有小说时显示提示信息
         let no_novels = Paragraph::new("没有发现小说文件")
             .style(Style::default().fg(Color::Yellow))
             .alignment(Alignment::Center)
@@ -103,7 +98,6 @@ fn render_delete_novel_menu(f: &mut Frame, app: &App, area: Rect) {
 
         f.render_widget(no_novels, content_area);
     } else {
-        // 显示小说列表
         let items: Vec<ListItem> = app
             .novels
             .iter()
@@ -145,7 +139,6 @@ fn render_delete_novel_menu(f: &mut Frame, app: &App, area: Rect) {
         f.render_stateful_widget(novel_list, list_area, &mut state);
     }
 
-    // 创建帮助信息
     let help_text = if app.novels.is_empty() {
         "Esc/q: 返回设置菜单"
     } else {
@@ -156,7 +149,6 @@ fn render_delete_novel_menu(f: &mut Frame, app: &App, area: Rect) {
 
 /// 渲染删除孤立记录菜单
 fn render_delete_orphaned_menu(f: &mut Frame, app: &App, area: Rect) {
-    // 创建标题
     let title = Paragraph::new("清理孤立记录")
         .style(Style::default().fg(Color::Yellow))
         .alignment(Alignment::Center);
@@ -171,7 +163,6 @@ fn render_delete_orphaned_menu(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(title, title_area);
 
     if app.settings.orphaned_novels.is_empty() {
-        // 没有孤立记录时显示提示信息
         let no_orphaned = Paragraph::new("没有发现孤立记录\n所有记录都对应有效的小说文件")
             .style(Style::default().fg(Color::Green))
             .alignment(Alignment::Center)
@@ -186,7 +177,6 @@ fn render_delete_orphaned_menu(f: &mut Frame, app: &App, area: Rect) {
 
         f.render_widget(no_orphaned, content_area);
     } else {
-        // 显示孤立记录列表
         let items: Vec<ListItem> = app
             .settings
             .orphaned_novels
@@ -229,7 +219,6 @@ fn render_delete_orphaned_menu(f: &mut Frame, app: &App, area: Rect) {
         f.render_stateful_widget(orphaned_list, list_area, &mut state);
     }
 
-    // 创建帮助信息
     let help_text = if app.settings.orphaned_novels.is_empty() {
         "Esc/q: 返回设置菜单"
     } else {
@@ -240,7 +229,6 @@ fn render_delete_orphaned_menu(f: &mut Frame, app: &App, area: Rect) {
 
 /// 渲染WebDAV配置界面
 fn render_webdav_config(f: &mut Frame, app: &App, area: Rect) {
-    // 创建标题
     let title = Paragraph::new("WebDAV 同步配置")
         .style(Style::default().fg(Color::Cyan))
         .alignment(Alignment::Center);
@@ -258,7 +246,6 @@ fn render_webdav_config(f: &mut Frame, app: &App, area: Rect) {
     let selected = config_state.selected_field;
     let edit_mode = config_state.edit_mode;
 
-    // 字段列表
     let fields = [
         (
             "启用同步",
@@ -313,7 +300,6 @@ fn render_webdav_config(f: &mut Frame, app: &App, area: Rect) {
         Style::default().fg(Color::Gray),
     )));
 
-    // 显示连接测试结果
     match &config_state.connection_status {
         Some(Ok(())) => {
             lines.push(Line::from(""));
@@ -345,7 +331,6 @@ fn render_webdav_config(f: &mut Frame, app: &App, area: Rect) {
     };
     f.render_widget(config_paragraph, content_area);
 
-    // 帮助信息
     let help_text = if edit_mode {
         "输入文本 | Enter: 确认 | Esc: 取消编辑"
     } else {

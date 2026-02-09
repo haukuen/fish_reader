@@ -36,7 +36,6 @@ impl WebDavClient {
 
         let response = request.send()?;
 
-        // 405 Method Not Allowed means directory already exists
         if !response.status().is_success()
             && response.status() != reqwest::StatusCode::METHOD_NOT_ALLOWED
         {

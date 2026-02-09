@@ -24,7 +24,6 @@ pub fn render_bookmark(f: &mut Frame, app: &App) {
 fn render_bookmark_list(f: &mut Frame, app: &App) {
     let area = f.area();
 
-    // 创建书签列表标题
     let title = Paragraph::new("书签管理")
         .style(Style::default().fg(Color::Blue))
         .alignment(Alignment::Center);
@@ -38,10 +37,8 @@ fn render_bookmark_list(f: &mut Frame, app: &App) {
 
     f.render_widget(title, title_area);
 
-    // 显示书签列表
     if let Some(bookmarks) = app.get_current_bookmarks() {
         if bookmarks.is_empty() {
-            // 没有书签时显示提示信息
             let no_bookmarks = Paragraph::new(
                 "暂无书签\n\n按 'a' 或 'A' 添加书签\n按 'm' 或 'M' 在阅读时快速添加书签",
             )
@@ -58,7 +55,6 @@ fn render_bookmark_list(f: &mut Frame, app: &App) {
 
             f.render_widget(no_bookmarks, content_area);
         } else {
-            // 创建书签列表
             let items: Vec<ListItem> = bookmarks
                 .iter()
                 .enumerate()
@@ -69,7 +65,6 @@ fn render_bookmark_list(f: &mut Frame, app: &App) {
                         "   "
                     };
 
-                    // 格式化书签信息
                     let display_text = format!(
                         "{}{} (行: {})",
                         prefix,
@@ -100,9 +95,8 @@ fn render_bookmark_list(f: &mut Frame, app: &App) {
             let mut state = ListState::default();
             state.select(app.bookmark.selected_index);
 
-            // 计算滚动偏移，让选中的书签显示在中间位置
             if let Some(selected) = app.bookmark.selected_index {
-                let visible_height = list_area.height.saturating_sub(2) as usize; // 减去边框
+                let visible_height = list_area.height.saturating_sub(2) as usize;
                 let half_height = visible_height / 2;
 
                 if selected >= half_height {
@@ -116,7 +110,6 @@ fn render_bookmark_list(f: &mut Frame, app: &App) {
         }
     }
 
-    // 创建帮助信息
     let help_text = if app.get_current_bookmarks().is_none_or(|b| b.is_empty()) {
         "a: 添加书签 | Esc/q: 返回阅读"
     } else {
@@ -132,7 +125,6 @@ fn render_bookmark_list(f: &mut Frame, app: &App) {
 fn render_bookmark_add(f: &mut Frame, app: &App) {
     let area = f.area();
 
-    // 创建添加书签标题
     let title = Paragraph::new("添加书签")
         .style(Style::default().fg(Color::Green))
         .alignment(Alignment::Center);
@@ -146,7 +138,6 @@ fn render_bookmark_add(f: &mut Frame, app: &App) {
 
     f.render_widget(title, title_area);
 
-    // 显示当前位置信息
     let position_info = if let Some(novel) = &app.current_novel {
         format!("当前位置: 第 {} 行", novel.progress.scroll_offset + 1)
     } else {
@@ -167,7 +158,6 @@ fn render_bookmark_add(f: &mut Frame, app: &App) {
 
     f.render_widget(position_paragraph, position_area);
 
-    // 创建书签名称输入框
     let name_text = format!("书签名称: {}", app.bookmark.input);
     let name_input = Paragraph::new(name_text)
         .style(Style::default().fg(Color::White))
@@ -182,7 +172,6 @@ fn render_bookmark_add(f: &mut Frame, app: &App) {
 
     f.render_widget(name_input, name_area);
 
-    // 创建帮助信息
     let help_text = "输入书签名称 | Enter: 确认添加 | Esc/q: 取消";
     render_help_info(f, help_text, area);
 }

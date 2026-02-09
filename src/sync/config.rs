@@ -44,7 +44,6 @@ impl WebDavConfig {
     pub fn save(&self) -> std::io::Result<()> {
         let config_path = Self::config_path();
 
-        // Ensure parent directory exists
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -76,5 +75,20 @@ mod tests {
         let config = WebDavConfig::default();
         assert!(!config.enabled);
         assert!(config.url.is_empty());
+    }
+
+    #[test]
+    fn test_is_configured_requires_enabled_and_non_empty_url() {
+        let mut config = WebDavConfig::default();
+        assert!(!config.is_configured());
+
+        config.enabled = true;
+        assert!(!config.is_configured());
+
+        config.url = "https://example.com/dav".to_string();
+        assert!(config.is_configured());
+
+        config.enabled = false;
+        assert!(!config.is_configured());
     }
 }

@@ -132,14 +132,11 @@ impl App {
     /// # 流程
     /// 1. 加载历史进度 2. 扫描小说目录（懒加载，不加载内容）
     pub fn new() -> Result<Self> {
-        // 加载阅读进度
         let library = Library::load();
 
-        // 获取小说文件（懒加载，只扫描文件不加载内容）
         let novels_dir = Self::get_novels_dir();
         let novels = Self::load_novels_from_dir(&novels_dir)?;
 
-        // Load WebDAV config
         let webdav_config = WebDavConfig::load();
 
         let mut app = App {
@@ -161,7 +158,6 @@ impl App {
             sync_status: SyncStatus::Idle,
         };
 
-        // 检测孤立的小说记录
         app.detect_orphaned_novels();
 
         Ok(app)
@@ -225,11 +221,11 @@ impl App {
             let path = entry.path();
             if path.is_file()
                 && let Some(ext) = path.extension().and_then(|s| s.to_str())
-                    && CONFIG.supported_extensions.contains(&ext) {
-                        // 懒加载：只创建 Novel 对象，不加载文件内容
-                        let novel = Novel::new(path);
-                        novels.push(novel);
-                    }
+                && CONFIG.supported_extensions.contains(&ext)
+            {
+                let novel = Novel::new(path);
+                novels.push(novel);
+            }
         }
 
         Ok(novels)
@@ -247,7 +243,6 @@ impl App {
             if !self.search.input.is_empty() {
                 self.search.results.clear();
 
-                // 提前转换搜索词为小写，避免在循环中重复转换
                 let search_term = self.search.input.to_lowercase();
 
                 for (line_num, line) in novel.lines().iter().enumerate() {
@@ -256,9 +251,7 @@ impl App {
                     }
                 }
 
-                // 更新选中索引，确保不越界
                 if !self.search.results.is_empty() {
-                    // 如果之前没有选中或选中索引越界，则选中第一个
                     let should_reset = match self.search.selected_index {
                         None => true,
                         Some(idx) => idx >= self.search.results.len(),
@@ -267,11 +260,9 @@ impl App {
                         self.search.selected_index = Some(0);
                     }
                 } else {
-                    // 没有搜索结果时清空选中
                     self.search.selected_index = None;
                 }
             } else {
-                // 搜索输入为空时清空结果
                 self.search.results.clear();
                 self.search.selected_index = None;
             }
@@ -288,7 +279,10 @@ impl App {
             if novel.chapters.is_empty() {
                 return None;
             }
-            Some(Self::find_chapter_index(&novel.chapters, novel.progress.scroll_offset))
+            Some(Self::find_chapter_index(
+                &novel.chapters,
+                novel.progress.scroll_offset,
+            ))
         })
     }
 
@@ -304,7 +298,6 @@ impl App {
             }
         }
 
-        // 重置选中索引
         self.settings.selected_orphaned_index = None;
     }
 
@@ -337,7 +330,6 @@ impl App {
 
             self.library.save()?;
 
-            // 调整选中索引
             if !self.novels.is_empty() {
                 let new_index = index.min(self.novels.len() - 1);
                 self.settings.selected_delete_novel_index = Some(new_index);
@@ -482,12 +474,10 @@ impl App {
         self.sync_rx = Some(rx);
         self.sync_status = SyncStatus::InProgress("准备上传...".into());
 
-        std::thread::spawn(move || {
-            match SyncEngine::new(&config) {
-                Ok(engine) => engine.sync_up(&tx),
-                Err(e) => {
-                    tx.send(SyncMessage::Failed(e.to_string())).ok();
-                }
+        std::thread::spawn(move || match SyncEngine::new(&config) {
+            Ok(engine) => engine.sync_up(&tx),
+            Err(e) => {
+                tx.send(SyncMessage::Failed(e.to_string())).ok();
             }
         });
     }
@@ -507,12 +497,10 @@ impl App {
         self.sync_rx = Some(rx);
         self.sync_status = SyncStatus::InProgress("准备下载...".into());
 
-        std::thread::spawn(move || {
-            match SyncEngine::new(&config) {
-                Ok(engine) => engine.sync_down(&tx),
-                Err(e) => {
-                    tx.send(SyncMessage::Failed(e.to_string())).ok();
-                }
+        std::thread::spawn(move || match SyncEngine::new(&config) {
+            Ok(engine) => engine.sync_down(&tx),
+            Err(e) => {
+                tx.send(SyncMessage::Failed(e.to_string())).ok();
             }
         });
     }
@@ -532,7 +520,6 @@ impl App {
                     return;
                 }
                 SyncMessage::DownloadComplete => {
-                    // 重新加载小说列表和阅读进度
                     if let Ok(novels) = Self::load_novels_from_dir(&Self::get_novels_dir()) {
                         self.novels = novels;
                     }
@@ -565,6 +552,8 @@ mod tests {
     use super::*;
     use crate::model::novel::{Chapter, ReadingProgress};
     use std::path::PathBuf;
+    use std::sync::mpsc;
+    use tempfile::tempdir;
 
     fn create_test_app() -> App {
         App {
@@ -756,5 +745,179 @@ mod tests {
         let novel = Novel::new(PathBuf::from("test.txt"));
         app.current_novel = Some(novel);
         assert!(app.find_current_chapter_index().is_none());
+    }
+
+    #[test]
+    fn test_load_novels_from_dir_filters_extensions() {
+        let dir = tempdir().unwrap();
+        let txt_path = dir.path().join("book_a.txt");
+        let md_path = dir.path().join("note.md");
+        let sub_dir = dir.path().join("nested");
+        std::fs::write(&txt_path, "hello").unwrap();
+        std::fs::write(&md_path, "ignore").unwrap();
+        std::fs::create_dir_all(&sub_dir).unwrap();
+        std::fs::write(sub_dir.join("book_b.txt"), "nested").unwrap();
+
+        let novels = App::load_novels_from_dir(dir.path()).unwrap();
+
+        assert_eq!(novels.len(), 1);
+        assert_eq!(novels[0].title, "book_a");
+        assert_eq!(novels[0].path, txt_path);
+    }
+
+    #[test]
+    fn test_detect_orphaned_novels_collects_missing_and_resets_index() {
+        let dir = tempdir().unwrap();
+        let existing = dir.path().join("exists.txt");
+        std::fs::write(&existing, "ok").unwrap();
+        let missing = dir.path().join("missing.txt");
+
+        let mut app = create_test_app();
+        app.settings.selected_orphaned_index = Some(3);
+        app.library.novels = vec![
+            NovelInfo {
+                title: "exists".to_string(),
+                path: existing,
+                progress: ReadingProgress::default(),
+            },
+            NovelInfo {
+                title: "missing".to_string(),
+                path: missing.clone(),
+                progress: ReadingProgress::default(),
+            },
+        ];
+
+        app.detect_orphaned_novels();
+
+        assert_eq!(app.settings.orphaned_novels.len(), 1);
+        assert_eq!(app.settings.orphaned_novels[0].path, missing);
+        assert_eq!(app.settings.selected_orphaned_index, None);
+    }
+
+    #[test]
+    fn test_delete_novel_removes_file_and_updates_selection() {
+        let dir = tempdir().unwrap();
+        let first = dir.path().join("first.txt");
+        let second = dir.path().join("second.txt");
+        std::fs::write(&first, "a").unwrap();
+        std::fs::write(&second, "b").unwrap();
+
+        let mut app = create_test_app();
+        app.novels = vec![Novel::new(first.clone()), Novel::new(second.clone())];
+        app.library.novels = vec![
+            NovelInfo {
+                title: "first".to_string(),
+                path: first.clone(),
+                progress: ReadingProgress::default(),
+            },
+            NovelInfo {
+                title: "second".to_string(),
+                path: second.clone(),
+                progress: ReadingProgress::default(),
+            },
+        ];
+        app.settings.selected_delete_novel_index = Some(0);
+
+        app.delete_novel(0).unwrap();
+
+        assert!(!first.exists());
+        assert_eq!(app.novels.len(), 1);
+        assert_eq!(app.novels[0].path, second);
+        assert_eq!(app.library.novels.len(), 1);
+        assert_eq!(app.settings.selected_delete_novel_index, Some(0));
+    }
+
+    #[test]
+    fn test_find_chapter_index_boundaries() {
+        let chapters = vec![
+            Chapter {
+                title: "A".to_string(),
+                start_line: 10,
+            },
+            Chapter {
+                title: "B".to_string(),
+                start_line: 20,
+            },
+            Chapter {
+                title: "C".to_string(),
+                start_line: 30,
+            },
+        ];
+
+        assert_eq!(App::find_chapter_index(&chapters, 0), 0);
+        assert_eq!(App::find_chapter_index(&chapters, 20), 1);
+        assert_eq!(App::find_chapter_index(&chapters, 999), 2);
+    }
+
+    #[test]
+    fn test_poll_sync_status_handles_progress_and_upload_complete() {
+        let mut app = create_test_app();
+        let (tx, rx) = mpsc::channel();
+        app.sync_rx = Some(rx);
+
+        tx.send(SyncMessage::Progress("进行中".to_string()))
+            .unwrap();
+        tx.send(SyncMessage::UploadComplete).unwrap();
+
+        app.poll_sync_status();
+
+        assert_eq!(app.sync_status, SyncStatus::Success("上传完成".to_string()));
+        assert!(app.sync_rx.is_none());
+    }
+
+    #[test]
+    fn test_poll_sync_status_handles_failed() {
+        let mut app = create_test_app();
+        let (tx, rx) = mpsc::channel();
+        app.sync_rx = Some(rx);
+
+        tx.send(SyncMessage::Failed("网络错误".to_string()))
+            .unwrap();
+
+        app.poll_sync_status();
+
+        assert_eq!(app.sync_status, SyncStatus::Error("网络错误".to_string()));
+        assert!(app.sync_rx.is_none());
+    }
+
+    #[test]
+    fn test_trigger_sync_requires_webdav_config() {
+        let mut app = create_test_app();
+        app.webdav_config.enabled = false;
+
+        app.trigger_sync();
+
+        assert_eq!(app.error_message.as_deref(), Some("请先配置 WebDAV"));
+        assert!(app.sync_rx.is_none());
+    }
+
+    #[test]
+    fn test_trigger_download_requires_webdav_config() {
+        let mut app = create_test_app();
+        app.webdav_config.enabled = false;
+
+        app.trigger_download();
+
+        assert_eq!(app.error_message.as_deref(), Some("请先配置 WebDAV"));
+        assert!(app.sync_rx.is_none());
+    }
+
+    #[test]
+    fn test_delete_novel_out_of_bounds_is_noop() {
+        let mut app = create_test_app();
+        app.novels = vec![Novel::new(PathBuf::from("first.txt"))];
+        app.library.novels = vec![NovelInfo {
+            title: "first".to_string(),
+            path: PathBuf::from("first.txt"),
+            progress: ReadingProgress::default(),
+        }];
+        app.settings.selected_delete_novel_index = Some(0);
+
+        let result = app.delete_novel(99);
+
+        assert!(result.is_ok());
+        assert_eq!(app.novels.len(), 1);
+        assert_eq!(app.library.novels.len(), 1);
+        assert_eq!(app.settings.selected_delete_novel_index, Some(0));
     }
 }

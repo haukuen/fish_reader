@@ -9,12 +9,14 @@ mod ui;
 use anyhow::{Context, Result};
 use clap::Command;
 use crossterm::ExecutableCommand;
-use crossterm::event::{self as crossterm_event, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind};
+use crossterm::event::{
+    self as crossterm_event, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind,
+};
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::prelude::*;
-use std::io::{stdout, Stdout};
+use std::io::{Stdout, stdout};
 use std::time::{Duration, Instant};
 
 use crate::app::App;
@@ -57,10 +59,8 @@ fn main() -> Result<()> {
 }
 
 fn run(app: &mut App) -> Result<()> {
-    // 使用 RAII 模式管理终端状态，确保 panic 时也能正确恢复
     let mut guard = TerminalGuard::new()?;
 
-    // 主循环
     let tick_rate = Duration::from_millis(100);
     let mut last_tick = Instant::now();
 
@@ -94,7 +94,6 @@ fn run(app: &mut App) -> Result<()> {
         }
     }
 
-    // 保存阅读进度
     if let Some(novel) = &app.current_novel {
         app.library
             .update_novel_progress(&novel.path, novel.progress.clone());
@@ -103,6 +102,5 @@ fn run(app: &mut App) -> Result<()> {
         eprintln!("Failed to save progress: {}", e);
     }
 
-    // guard 在此处 drop，自动恢复终端状态
     Ok(())
 }

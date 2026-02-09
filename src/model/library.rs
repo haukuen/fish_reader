@@ -84,11 +84,13 @@ impl Library {
         let progress_path = Self::get_progress_path();
         let content = serde_json::to_string_pretty(self)?;
 
-        // 限制备份频率，忽略备份错误（不影响主流程）
         let _ = Self::create_backup_if_needed(&progress_path);
 
-        // 原子写入：先写临时文件，再重命名
-        let temp_path = progress_path.with_extension("tmp");
+        let temp_suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let temp_path = progress_path.with_extension(format!("tmp.{}", temp_suffix));
         std::fs::write(&temp_path, &content)?;
 
         #[cfg(windows)]
@@ -142,14 +144,17 @@ impl Library {
             .unwrap_or_default()
             .as_secs();
 
-        let period_timestamp = timestamp / CONFIG.backup_timestamp_interval * CONFIG.backup_timestamp_interval;
+        let period_timestamp =
+            timestamp / CONFIG.backup_timestamp_interval * CONFIG.backup_timestamp_interval;
 
-        // 直接在文件名后追加备份后缀，避免 with_extension 替换原有扩展名
         let file_name = progress_path
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or(CONFIG.progress_filename);
-        let backup_name = format!("{}.{}.{}", file_name, CONFIG.backup_suffix, period_timestamp);
+        let backup_name = format!(
+            "{}.{}.{}",
+            file_name, CONFIG.backup_suffix, period_timestamp
+        );
         let backup_path = progress_path.with_file_name(backup_name);
 
         if backup_path.exists() {
@@ -158,7 +163,8 @@ impl Library {
 
         std::fs::copy(progress_path, &backup_path)?;
 
-        let cutoff_timestamp = timestamp.saturating_sub(CONFIG.backup_retention_days * 24 * 60 * 60);
+        let cutoff_timestamp =
+            timestamp.saturating_sub(CONFIG.backup_retention_days * 24 * 60 * 60);
         if let Some(backup_dir) = progress_path.parent() {
             Self::cleanup_old_backups(backup_dir, cutoff_timestamp);
         }
@@ -171,7 +177,6 @@ impl Library {
             return;
         };
 
-        // 备份文件名格式: {progress_filename}.{backup_suffix}.{timestamp}
         let backup_prefix = format!("{}.{}.", CONFIG.progress_filename, CONFIG.backup_suffix);
 
         for entry in entries.flatten() {
@@ -237,6 +242,30 @@ impl Library {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::{Mutex, OnceLock};
+
+    fn progress_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn clean_progress_artifacts(progress_path: &Path) {
+        let _ = std::fs::remove_file(progress_path);
+        if let Some(parent) = progress_path.parent()
+            && let Ok(entries) = std::fs::read_dir(parent)
+        {
+            let prefix = format!("{}.", CONFIG.progress_filename);
+            for entry in entries.flatten() {
+                let p = entry.path();
+                let Some(name) = p.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                if name.starts_with(&prefix) {
+                    let _ = std::fs::remove_file(p);
+                }
+            }
+        }
+    }
 
     #[test]
     fn test_update_and_get_progress() {
@@ -291,5 +320,64 @@ mod tests {
         let progress = library.get_novel_progress(&path);
 
         assert_eq!(progress, ReadingProgress::default());
+    }
+
+    #[test]
+    fn test_save_and_load_round_trip() {
+        let _guard = progress_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let progress_path = Library::get_progress_path();
+        clean_progress_artifacts(&progress_path);
+
+        let mut library = Library::new();
+        let novel_path = PathBuf::from("/tmp/round_trip.txt");
+        library.update_novel_progress(
+            &novel_path,
+            ReadingProgress {
+                scroll_offset: 42,
+                bookmarks: Vec::new(),
+            },
+        );
+        library.save().unwrap();
+
+        let loaded = Library::load();
+        assert_eq!(loaded.novels.len(), 1);
+        assert_eq!(loaded.novels[0].path, novel_path);
+        assert_eq!(loaded.novels[0].progress.scroll_offset, 42);
+
+        clean_progress_artifacts(&progress_path);
+    }
+
+    #[test]
+    fn test_load_corrupted_file_returns_new_and_creates_backup() {
+        let _guard = progress_test_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let progress_path = Library::get_progress_path();
+        clean_progress_artifacts(&progress_path);
+        std::fs::write(&progress_path, "{ this is not valid json").unwrap();
+
+        let loaded = Library::load();
+        assert!(loaded.novels.is_empty());
+
+        let mut has_corrupted_backup = false;
+        if let Some(parent) = progress_path.parent()
+            && let Ok(entries) = std::fs::read_dir(parent)
+        {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                if name.contains(".json.corrupted.") {
+                    has_corrupted_backup = true;
+                    break;
+                }
+            }
+        }
+        assert!(has_corrupted_backup);
+
+        clean_progress_artifacts(&progress_path);
     }
 }

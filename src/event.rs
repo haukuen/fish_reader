@@ -16,13 +16,11 @@ use unicode_width::UnicodeWidthStr;
 /// 占用的物理行数。空字符串或零宽度返回 1。
 fn count_physical_lines(line: &str, width: usize) -> usize {
     if line.is_empty() {
-        return 1; // 空行也会占用一个物理行
+        return 1;
     }
     if width == 0 {
         return 1;
     }
-    // 计算字符串的总宽度，并除以可用宽度。
-    // 向上取整以得到行数。
     line.width().div_ceil(width)
 }
 
@@ -45,10 +43,8 @@ fn navigate_list(current: Option<usize>, len: usize, move_up: bool) -> Option<us
     }
 
     let new_idx = if move_up {
-        // 向上移动：有选中则减1，无选中则选中最后一项
         current.map(|idx| idx.saturating_sub(1)).unwrap_or(len - 1)
     } else {
-        // 向下移动：有选中则加1（循环），无选中则选中第一项
         current.map(|idx| (idx + 1) % len).unwrap_or(0)
     };
 
@@ -64,9 +60,11 @@ fn navigate_list(current: Option<usize>, len: usize, move_up: bool) -> Option<us
 /// * `app` - 应用实例的可变引用
 /// * `key` - 按下的键位代码
 pub fn handle_key(app: &mut App, key: KeyCode) {
-    // 重置状态消息
     app.error_message = None;
-    if matches!(app.sync_status, SyncStatus::Success(_) | SyncStatus::Error(_)) {
+    if matches!(
+        app.sync_status,
+        SyncStatus::Success(_) | SyncStatus::Error(_)
+    ) {
         app.sync_status = SyncStatus::Idle;
     }
 
@@ -99,12 +97,10 @@ pub fn handle_key(app: &mut App, key: KeyCode) {
 fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            // 返回上一个状态
             app.state = app.previous_state.clone();
         }
         KeyCode::Enter => {
             if let Some(index) = app.bookmark.selected_index {
-                // 跳转到选中的书签
                 if app.jump_to_bookmark(index).is_some() {
                     app.state = AppState::Reading;
                 }
@@ -112,20 +108,20 @@ fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
         }
         KeyCode::Up | KeyCode::Char('k') => {
             if let Some(bookmarks) = app.get_current_bookmarks() {
-                app.bookmark.selected_index = navigate_list(app.bookmark.selected_index, bookmarks.len(), true);
+                app.bookmark.selected_index =
+                    navigate_list(app.bookmark.selected_index, bookmarks.len(), true);
             }
         }
         KeyCode::Down | KeyCode::Char('j') => {
             if let Some(bookmarks) = app.get_current_bookmarks() {
-                app.bookmark.selected_index = navigate_list(app.bookmark.selected_index, bookmarks.len(), false);
+                app.bookmark.selected_index =
+                    navigate_list(app.bookmark.selected_index, bookmarks.len(), false);
             }
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
-            // 删除选中的书签
             if let Some(index) = app.bookmark.selected_index
                 && app.remove_bookmark(index).is_some()
             {
-                // 调整选中索引
                 if let Some(bookmarks) = app.get_current_bookmarks() {
                     app.bookmark.selected_index = if bookmarks.is_empty() {
                         None
@@ -136,7 +132,6 @@ fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
             }
         }
         KeyCode::Char('a') | KeyCode::Char('A') => {
-            // 进入添加书签模式
             app.state = AppState::BookmarkAdd;
             app.clear_bookmark_inputs();
         }
@@ -160,12 +155,10 @@ fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
 fn handle_bookmark_add_key(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            // 取消添加，返回上一个状态
             app.state = app.previous_state.clone();
             app.clear_bookmark_inputs();
         }
         KeyCode::Enter => {
-            // 确认添加书签
             if !app.bookmark.input.trim().is_empty() {
                 app.add_bookmark(app.bookmark.input.clone());
                 app.state = AppState::BookmarkList;
@@ -173,11 +166,9 @@ fn handle_bookmark_add_key(app: &mut App, key: KeyCode) {
             }
         }
         KeyCode::Backspace => {
-            // 删除输入的最后一个字符
             app.bookmark.input.pop();
         }
         KeyCode::Char(c) => {
-            // 添加字符到书签名称输入框
             app.bookmark.input.push(c);
         }
         _ => {}
@@ -201,7 +192,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
             AppState::Settings => handle_settings_key(app, KeyCode::Up),
             AppState::Searching => handle_search_key(app, KeyCode::Up),
             AppState::BookmarkList => handle_bookmark_list_key(app, KeyCode::Up),
-            AppState::BookmarkAdd => {} // 添加书签模式不处理滚动
+            AppState::BookmarkAdd => {}
         },
         MouseEventKind::ScrollDown => match app.state {
             AppState::Reading => handle_reader_key(app, KeyCode::Down),
@@ -210,7 +201,7 @@ pub fn handle_mouse(app: &mut App, mouse: MouseEvent) {
             AppState::Settings => handle_settings_key(app, KeyCode::Down),
             AppState::Searching => handle_search_key(app, KeyCode::Down),
             AppState::BookmarkList => handle_bookmark_list_key(app, KeyCode::Down),
-            AppState::BookmarkAdd => {} // 添加书签模式不处理滚动
+            AppState::BookmarkAdd => {}
         },
         _ => {}
     }
@@ -236,10 +227,12 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
             app.should_quit = true;
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            app.selected_novel_index = navigate_list(app.selected_novel_index, app.novels.len(), true);
+            app.selected_novel_index =
+                navigate_list(app.selected_novel_index, app.novels.len(), true);
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            app.selected_novel_index = navigate_list(app.selected_novel_index, app.novels.len(), false);
+            app.selected_novel_index =
+                navigate_list(app.selected_novel_index, app.novels.len(), false);
         }
         KeyCode::Enter => {
             if let Some(index) = app.selected_novel_index
@@ -254,7 +247,6 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
                     return;
                 }
 
-                // 恢复阅读进度
                 novel.progress = app.library.get_novel_progress(&novel.path);
 
                 app.current_novel = Some(novel);
@@ -262,16 +254,13 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
             }
         }
         KeyCode::Char('s') | KeyCode::Char('S') => {
-            // 进入设置页面
             app.detect_orphaned_novels();
             app.state = AppState::Settings;
         }
         KeyCode::Char('w') | KeyCode::Char('W') => {
-            // 手动上传同步
             app.trigger_sync();
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
-            // 手动下载同步
             app.trigger_download();
         }
         _ => {}
@@ -305,8 +294,8 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
 
         let content_width = app.terminal_size.width.saturating_sub(4) as usize;
         let content_height = (app.terminal_size.height as usize)
-            .saturating_sub(1) // 帮助信息1行
-            .saturating_sub(2) // 上下边框各占1行
+            .saturating_sub(1)
+            .saturating_sub(2)
             .saturating_sub(1);
         let page_size = content_height.max(1);
 
@@ -320,24 +309,25 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
                 app.state = AppState::Bookshelf;
             }
             KeyCode::Up | KeyCode::Char('k') => {
-                // 向上滚动一行
                 if novel.progress.scroll_offset > 0 {
                     novel.progress.scroll_offset -= 1;
                 }
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                // 向下滚动一行
                 if novel.progress.scroll_offset < max_scroll.saturating_sub(page_size) {
                     novel.progress.scroll_offset += 1;
                 }
             }
             KeyCode::Left | KeyCode::Char('h') => {
-                // 向上翻页
                 let mut physical_lines_in_prev_page = 0;
                 let mut logical_lines_to_jump = 0;
 
-                // 从当前行向后迭代以找到前一页的开头
-                for line in novel.lines().iter().take(novel.progress.scroll_offset).rev() {
+                for line in novel
+                    .lines()
+                    .iter()
+                    .take(novel.progress.scroll_offset)
+                    .rev()
+                {
                     let line_height = count_physical_lines(line, content_width);
                     if physical_lines_in_prev_page + line_height > page_size {
                         break;
@@ -352,7 +342,6 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
                     .saturating_sub(logical_lines_to_jump.max(1));
             }
             KeyCode::Right | KeyCode::Char('l') => {
-                // 向下翻页
                 let mut physical_lines_on_current_page = 0;
                 let mut logical_lines_to_jump = 0;
 
@@ -370,34 +359,29 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
                     (novel.progress.scroll_offset + jump).min(max_scroll);
             }
             KeyCode::Char('/') => {
-                // 进入搜索模式
                 app.previous_state = AppState::Reading;
                 app.state = AppState::Searching;
                 app.search.clear();
             }
             KeyCode::Char('t') | KeyCode::Char('T') => {
-                // 进入章节目录模式
                 app.previous_state = AppState::Reading;
                 app.state = AppState::ChapterList;
-                // 根据当前阅读位置自动选择最接近的章节
                 app.selected_chapter_index = app.find_current_chapter_index();
             }
             KeyCode::Char('b') | KeyCode::Char('B') => {
-                // 进入书签列表模式
                 app.previous_state = AppState::Reading;
                 app.state = AppState::BookmarkList;
                 app.bookmark.selected_index = None;
             }
             KeyCode::Char('m') | KeyCode::Char('M') => {
-                // 进入添加书签模式
                 app.previous_state = AppState::Reading;
                 app.state = AppState::BookmarkAdd;
                 app.clear_bookmark_inputs();
             }
             KeyCode::Char('[') => {
-                // 跳转到上一章
                 if !novel.chapters.is_empty() {
-                    let current_idx = App::find_chapter_index(&novel.chapters, novel.progress.scroll_offset);
+                    let current_idx =
+                        App::find_chapter_index(&novel.chapters, novel.progress.scroll_offset);
                     if current_idx > 0 {
                         novel.progress.scroll_offset = novel.chapters[current_idx - 1].start_line;
                         app.save_current_progress();
@@ -405,9 +389,9 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
                 }
             }
             KeyCode::Char(']') => {
-                // 跳转到下一章
                 if !novel.chapters.is_empty() {
-                    let current_idx = App::find_chapter_index(&novel.chapters, novel.progress.scroll_offset);
+                    let current_idx =
+                        App::find_chapter_index(&novel.chapters, novel.progress.scroll_offset);
                     if current_idx + 1 < novel.chapters.len() {
                         novel.progress.scroll_offset = novel.chapters[current_idx + 1].start_line;
                         app.save_current_progress();
@@ -437,7 +421,6 @@ fn handle_reader_key(app: &mut App, key: KeyCode) {
 fn handle_search_key(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            // 返回上一个状态
             app.state = app.previous_state.clone();
         }
         KeyCode::Enter => {
@@ -473,12 +456,10 @@ fn handle_search_key(app: &mut App, key: KeyCode) {
             }
         }
         KeyCode::Backspace => {
-            // 删除搜索输入的最后一个字符
             app.search.input.pop();
             app.perform_search();
         }
         KeyCode::Char(c) => {
-            // 添加字符到搜索输入
             app.search.input.push(c);
             app.perform_search();
         }
@@ -502,7 +483,6 @@ fn handle_search_key(app: &mut App, key: KeyCode) {
 fn handle_chapter_list_key(app: &mut App, key: KeyCode) {
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            // 返回阅读模式
             app.state = app.previous_state.clone();
         }
         KeyCode::Enter => {
@@ -518,12 +498,14 @@ fn handle_chapter_list_key(app: &mut App, key: KeyCode) {
         }
         KeyCode::Up | KeyCode::Char('k') => {
             if let Some(novel) = &app.current_novel {
-                app.selected_chapter_index = navigate_list(app.selected_chapter_index, novel.chapters.len(), true);
+                app.selected_chapter_index =
+                    navigate_list(app.selected_chapter_index, novel.chapters.len(), true);
             }
         }
         KeyCode::Down | KeyCode::Char('j') => {
             if let Some(novel) = &app.current_novel {
-                app.selected_chapter_index = navigate_list(app.selected_chapter_index, novel.chapters.len(), false);
+                app.selected_chapter_index =
+                    navigate_list(app.selected_chapter_index, novel.chapters.len(), false);
             }
         }
         _ => {}
@@ -568,21 +550,27 @@ fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
 
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            // 返回书架
             app.state = AppState::Bookshelf;
             app.settings.reset();
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            app.settings.selected_option = navigate_list(app.settings.selected_option, CONFIG.settings_menu_count, true);
+            app.settings.selected_option = navigate_list(
+                app.settings.selected_option,
+                CONFIG.settings_menu_count,
+                true,
+            );
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            app.settings.selected_option = navigate_list(app.settings.selected_option, CONFIG.settings_menu_count, false);
+            app.settings.selected_option = navigate_list(
+                app.settings.selected_option,
+                CONFIG.settings_menu_count,
+                false,
+            );
         }
         KeyCode::Enter => {
             if let Some(index) = app.settings.selected_option {
                 match index {
                     0 => {
-                        // 进入删除小说模式
                         app.settings.mode = SettingsMode::DeleteNovel;
                         app.settings.selected_delete_novel_index = if !app.novels.is_empty() {
                             Some(0)
@@ -591,14 +579,11 @@ fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
                         };
                     }
                     1 => {
-                        // 进入删除孤立记录模式
                         app.settings.mode = SettingsMode::DeleteOrphaned;
                         app.detect_orphaned_novels();
                     }
                     2 => {
-                        // 进入WebDAV配置模式
                         app.settings.mode = SettingsMode::WebDavConfig;
-                        // 初始化临时配置为当前配置
                         app.settings.webdav_config_state.temp_config = app.webdav_config.clone();
                         app.settings.webdav_config_state.selected_field = 0;
                         app.settings.webdav_config_state.edit_mode = false;
@@ -630,14 +615,21 @@ fn handle_delete_novel_key(app: &mut App, key: KeyCode) {
 
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            // 返回设置主菜单
             app.settings.mode = SettingsMode::MainMenu;
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            app.settings.selected_delete_novel_index = navigate_list(app.settings.selected_delete_novel_index, app.novels.len(), true);
+            app.settings.selected_delete_novel_index = navigate_list(
+                app.settings.selected_delete_novel_index,
+                app.novels.len(),
+                true,
+            );
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            app.settings.selected_delete_novel_index = navigate_list(app.settings.selected_delete_novel_index, app.novels.len(), false);
+            app.settings.selected_delete_novel_index = navigate_list(
+                app.settings.selected_delete_novel_index,
+                app.novels.len(),
+                false,
+            );
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
             if let Some(index) = app.settings.selected_delete_novel_index
@@ -669,14 +661,21 @@ fn handle_delete_orphaned_key(app: &mut App, key: KeyCode) {
 
     match key {
         KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            // 返回设置主菜单
             app.settings.mode = SettingsMode::MainMenu;
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            app.settings.selected_orphaned_index = navigate_list(app.settings.selected_orphaned_index, app.settings.orphaned_novels.len(), true);
+            app.settings.selected_orphaned_index = navigate_list(
+                app.settings.selected_orphaned_index,
+                app.settings.orphaned_novels.len(),
+                true,
+            );
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            app.settings.selected_orphaned_index = navigate_list(app.settings.selected_orphaned_index, app.settings.orphaned_novels.len(), false);
+            app.settings.selected_orphaned_index = navigate_list(
+                app.settings.selected_orphaned_index,
+                app.settings.orphaned_novels.len(),
+                false,
+            );
         }
         KeyCode::Char('d') | KeyCode::Char('D') => {
             if let Some(index) = app.settings.selected_orphaned_index
@@ -707,7 +706,6 @@ fn handle_webdav_config_key(app: &mut App, key: KeyCode) {
     let config_state = &mut app.settings.webdav_config_state;
 
     if config_state.edit_mode {
-        // 编辑模式下的处理
         match key {
             KeyCode::Esc => {
                 config_state.edit_mode = false;
@@ -715,31 +713,41 @@ fn handle_webdav_config_key(app: &mut App, key: KeyCode) {
             KeyCode::Enter => {
                 config_state.edit_mode = false;
             }
-            KeyCode::Backspace => {
-                match config_state.selected_field {
-                    1 => { config_state.temp_config.url.pop(); }
-                    2 => { config_state.temp_config.username.pop(); }
-                    3 => { config_state.temp_config.password.pop(); }
-                    4 => { config_state.temp_config.remote_path.pop(); }
-                    _ => {}
+            KeyCode::Backspace => match config_state.selected_field {
+                1 => {
+                    config_state.temp_config.url.pop();
                 }
-            }
-            KeyCode::Char(c) => {
-                match config_state.selected_field {
-                    1 => { config_state.temp_config.url.push(c); }
-                    2 => { config_state.temp_config.username.push(c); }
-                    3 => { config_state.temp_config.password.push(c); }
-                    4 => { config_state.temp_config.remote_path.push(c); }
-                    _ => {}
+                2 => {
+                    config_state.temp_config.username.pop();
                 }
-            }
+                3 => {
+                    config_state.temp_config.password.pop();
+                }
+                4 => {
+                    config_state.temp_config.remote_path.pop();
+                }
+                _ => {}
+            },
+            KeyCode::Char(c) => match config_state.selected_field {
+                1 => {
+                    config_state.temp_config.url.push(c);
+                }
+                2 => {
+                    config_state.temp_config.username.push(c);
+                }
+                3 => {
+                    config_state.temp_config.password.push(c);
+                }
+                4 => {
+                    config_state.temp_config.remote_path.push(c);
+                }
+                _ => {}
+            },
             _ => {}
         }
     } else {
-        // 导航模式下的处理
         match key {
             KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-                // 返回设置主菜单
                 app.settings.mode = SettingsMode::MainMenu;
             }
             KeyCode::Up => {
@@ -753,35 +761,27 @@ fn handle_webdav_config_key(app: &mut App, key: KeyCode) {
                 }
             }
             KeyCode::Tab => {
-                // 切换启用状态（只在第一个字段时）
                 if config_state.selected_field == 0 {
                     config_state.temp_config.enabled = !config_state.temp_config.enabled;
                 }
             }
             KeyCode::Char('p') | KeyCode::Char('P') => {
-                // 切换密码显示
                 config_state.show_password = !config_state.show_password;
             }
-            KeyCode::Enter => {
-                match config_state.selected_field {
-                    0 => {
-                        // 切换启用状态
-                        config_state.temp_config.enabled = !config_state.temp_config.enabled;
-                    }
-                    1..=4 => {
-                        // 进入编辑模式
-                        config_state.edit_mode = true;
-                    }
-                    _ => {}
+            KeyCode::Enter => match config_state.selected_field {
+                0 => {
+                    config_state.temp_config.enabled = !config_state.temp_config.enabled;
                 }
-            }
+                1..=4 => {
+                    config_state.edit_mode = true;
+                }
+                _ => {}
+            },
             KeyCode::Char('s') | KeyCode::Char('S') => {
-                // 保存配置
                 app.save_webdav_config();
                 app.settings.mode = SettingsMode::MainMenu;
             }
             KeyCode::Char('t') | KeyCode::Char('T') => {
-                // 测试连接
                 let temp_config = &app.settings.webdav_config_state.temp_config;
                 let result = match WebDavClient::new(temp_config) {
                     Ok(client) => match client.test_connection(&temp_config.remote_path) {
@@ -800,44 +800,142 @@ fn handle_webdav_config_key(app: &mut App, key: KeyCode) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::{App, BookmarkState, SearchState, SettingsState};
+    use crate::model::library::Library;
+    use crate::model::novel::Novel;
+    use crate::state::AppState;
+    use crate::sync::config::WebDavConfig;
+    use crossterm::event::{KeyModifiers, MouseEvent};
+    use ratatui::layout::Rect;
+    use std::path::PathBuf;
+
+    fn create_test_app() -> App {
+        App {
+            state: AppState::Bookshelf,
+            library: Library::default(),
+            novels: Vec::new(),
+            selected_novel_index: None,
+            current_novel: None,
+            should_quit: false,
+            terminal_size: Rect::default(),
+            selected_chapter_index: None,
+            previous_state: AppState::Bookshelf,
+            search: SearchState::default(),
+            bookmark: BookmarkState::default(),
+            settings: SettingsState::default(),
+            error_message: None,
+            webdav_config: WebDavConfig::default(),
+            sync_rx: None,
+            sync_status: SyncStatus::Idle,
+        }
+    }
 
     #[test]
     fn test_count_physical_lines_empty() {
-        // 空字符串应返回1行
         assert_eq!(count_physical_lines("", 80), 1);
     }
 
     #[test]
     fn test_count_physical_lines_zero_width() {
-        // 零宽度应返回1行（避免除零错误）
         assert_eq!(count_physical_lines("hello", 0), 1);
     }
 
     #[test]
     fn test_count_physical_lines_single_line() {
-        // 短字符串在宽屏幕上只占1行
         assert_eq!(count_physical_lines("hello", 80), 1);
     }
 
     #[test]
     fn test_count_physical_lines_wrap() {
-        // 10个字符，宽度为4，需要3行 (4+4+2)
         assert_eq!(count_physical_lines("1234567890", 4), 3);
-        // 8个字符，宽度为4，需要2行
         assert_eq!(count_physical_lines("12345678", 4), 2);
     }
 
     #[test]
     fn test_count_physical_lines_chinese() {
-        // 中文字符宽度为2，"你好" = 4宽度
         assert_eq!(count_physical_lines("你好", 4), 1);
-        assert_eq!(count_physical_lines("你好", 3), 2); // 4宽度在3列需要2行
-        assert_eq!(count_physical_lines("你好世界", 4), 2); // 8宽度在4列需要2行
+        assert_eq!(count_physical_lines("你好", 3), 2);
+        assert_eq!(count_physical_lines("你好世界", 4), 2);
     }
 
     #[test]
     fn test_count_physical_lines_exact_fit() {
         assert_eq!(count_physical_lines("1234", 4), 1);
         assert_eq!(count_physical_lines("12345", 5), 1);
+    }
+
+    #[test]
+    fn test_navigate_list_wrap_and_empty() {
+        assert_eq!(navigate_list(None, 3, false), Some(0));
+        assert_eq!(navigate_list(Some(0), 3, true), Some(0));
+        assert_eq!(navigate_list(Some(2), 3, false), Some(0));
+        assert_eq!(navigate_list(Some(0), 0, false), None);
+    }
+
+    #[test]
+    fn test_handle_key_bookshelf_quit() {
+        let mut app = create_test_app();
+        app.state = AppState::Bookshelf;
+
+        handle_key(&mut app, KeyCode::Char('q'));
+
+        assert!(app.should_quit);
+    }
+
+    #[test]
+    fn test_handle_key_search_enter_jump_to_reading() {
+        let mut app = create_test_app();
+        let novel = Novel::new(PathBuf::from("test.txt"));
+        app.current_novel = Some(novel);
+        app.state = AppState::Searching;
+        app.search.results = vec![(7, "line".to_string())];
+        app.search.selected_index = Some(0);
+
+        handle_key(&mut app, KeyCode::Enter);
+
+        assert!(app.state == AppState::Reading);
+        assert_eq!(
+            app.current_novel.as_ref().unwrap().progress.scroll_offset,
+            7
+        );
+    }
+
+    #[test]
+    fn test_handle_mouse_scroll_down_bookshelf_changes_selection() {
+        let mut app = create_test_app();
+        app.state = AppState::Bookshelf;
+        app.novels = vec![
+            Novel::new(PathBuf::from("a.txt")),
+            Novel::new(PathBuf::from("b.txt")),
+        ];
+
+        let mouse_down = MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        handle_mouse(&mut app, mouse_down);
+        handle_mouse(&mut app, mouse_down);
+
+        assert_eq!(app.selected_novel_index, Some(1));
+    }
+
+    #[test]
+    fn test_handle_mouse_ignored_in_bookmark_add() {
+        let mut app = create_test_app();
+        app.state = AppState::BookmarkAdd;
+        app.bookmark.input = "abc".to_string();
+
+        let mouse_up = MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 0,
+            row: 0,
+            modifiers: KeyModifiers::NONE,
+        };
+        handle_mouse(&mut app, mouse_up);
+
+        assert_eq!(app.bookmark.input, "abc");
+        assert!(app.state == AppState::BookmarkAdd);
     }
 }
