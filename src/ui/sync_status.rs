@@ -1,30 +1,34 @@
 use ratatui::{prelude::*, style::Color, widgets::Paragraph};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SyncStatus {
     Idle,
-    Syncing,
-    Error,
-    Success,
+    InProgress(String),
+    Success(String),
+    Error(String),
 }
 
 impl SyncStatus {
     pub fn text(&self) -> &str {
         match self {
-            SyncStatus::Idle => "同步: 就绪",
-            SyncStatus::Syncing => "同步: 进行中...",
-            SyncStatus::Error => "同步: 错误",
-            SyncStatus::Success => "同步: 完成",
+            SyncStatus::Idle => "",
+            SyncStatus::InProgress(msg) | SyncStatus::Success(msg) | SyncStatus::Error(msg) => {
+                msg
+            }
         }
     }
 
     pub fn color(&self) -> Color {
         match self {
             SyncStatus::Idle => Color::Gray,
-            SyncStatus::Syncing => Color::Yellow,
-            SyncStatus::Error => Color::Red,
-            SyncStatus::Success => Color::Green,
+            SyncStatus::InProgress(_) => Color::Yellow,
+            SyncStatus::Success(_) => Color::Green,
+            SyncStatus::Error(_) => Color::Red,
         }
+    }
+
+    pub fn is_busy(&self) -> bool {
+        matches!(self, SyncStatus::InProgress(_))
     }
 }
 
@@ -35,8 +39,10 @@ pub struct SyncStatusWidget {
 impl Widget for SyncStatusWidget {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let text = self.status.text();
+        if text.is_empty() {
+            return;
+        }
         let style = Style::default().fg(self.status.color());
-
         Paragraph::new(text).style(style).render(area, buf);
     }
 }

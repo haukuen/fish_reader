@@ -5,9 +5,6 @@ use std::path::Path;
 #[derive(Debug, Clone)]
 pub struct DavResource {
     pub path: String,
-    pub size: u64,
-    pub modified_time: Option<u64>,
-    pub is_dir: bool,
 }
 
 pub struct WebDavClient {
@@ -20,7 +17,7 @@ pub struct WebDavClient {
 impl WebDavClient {
     pub fn new(config: &WebDavConfig) -> anyhow::Result<Self> {
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(10))
             .build()?;
 
         Ok(Self {
@@ -119,20 +116,25 @@ impl WebDavClient {
     fn parse_propfind(&self, xml: &str) -> anyhow::Result<Vec<DavResource>> {
         let mut resources = Vec::new();
 
-        for line in xml.lines() {
-            if line.contains("<d:href>") || line.contains("<D:href>") {
-                if let Some(start) = line.find(">") {
-                    if let Some(end) = line.rfind("<") {
-                        let path = line[start + 1..end].to_string();
-                        if !path.ends_with('/') {
-                            resources.push(DavResource {
-                                path,
-                                size: 0,
-                                modified_time: None,
-                                is_dir: false,
-                            });
-                        }
+        // 支持常见 WebDAV 命名空间前缀，可处理多行 XML
+        for tag in ["<d:href>", "<D:href>", "<href>"] {
+            let close_tag = tag.replace('<', "</");
+            let mut search_from = 0;
+
+            while let Some(start) = xml[search_from..].find(tag) {
+                let content_start = search_from + start + tag.len();
+                if let Some(end) = xml[content_start..].find(&close_tag) {
+                    let path = xml[content_start..content_start + end]
+                        .trim()
+                        .to_string();
+                    if !path.is_empty() && !path.ends_with('/') {
+                        resources.push(DavResource {
+                            path,
+                        });
                     }
+                    search_from = content_start + end + close_tag.len();
+                } else {
+                    break;
                 }
             }
         }

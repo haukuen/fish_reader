@@ -56,7 +56,7 @@ impl WebDavConfig {
     }
 
     fn config_path() -> std::path::PathBuf {
-        let mut path = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+        let mut path = home::home_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
         path.push(".fish_reader");
         path.push("webdav.json");
         path

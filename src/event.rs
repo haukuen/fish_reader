@@ -1,5 +1,6 @@
 use crate::app::App;
 use crate::state::AppState;
+use crate::ui::sync_status::SyncStatus;
 use crossterm::event::{KeyCode, MouseEvent, MouseEventKind};
 use unicode_width::UnicodeWidthStr;
 
@@ -63,6 +64,12 @@ fn navigate_list(current: Option<usize>, len: usize, move_up: bool) -> Option<us
 /// * `app` - 应用实例的可变引用
 /// * `key` - 按下的键位代码
 pub fn handle_key(app: &mut App, key: KeyCode) {
+    // 重置状态消息
+    app.error_message = None;
+    if matches!(app.sync_status, SyncStatus::Success(_) | SyncStatus::Error(_)) {
+        app.sync_status = SyncStatus::Idle;
+    }
+
     match app.state {
         AppState::Bookshelf => handle_bookshelf_key(app, key),
         AppState::Reading => handle_reader_key(app, key),
@@ -260,8 +267,12 @@ fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
             app.state = AppState::Settings;
         }
         KeyCode::Char('w') | KeyCode::Char('W') => {
-            // 触发手动同步
+            // 手动上传同步
             app.trigger_sync();
+        }
+        KeyCode::Char('d') | KeyCode::Char('D') => {
+            // 手动下载同步
+            app.trigger_download();
         }
         _ => {}
     }

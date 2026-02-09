@@ -51,19 +51,7 @@ fn main() -> Result<()> {
         .get_matches();
 
     let mut app = App::new().context("创建应用失败")?;
-    
-    // Check for sync conflicts on startup
-    app.check_sync_conflicts();
-    
-    // Perform sync down if no conflicts
-    if !app.show_conflict_dialog {
-        app.sync_down();
-    }
-    
     run(&mut app).context("运行应用失败")?;
-    
-    // Sync up on exit
-    app.sync_up();
 
     Ok(())
 }
@@ -77,6 +65,7 @@ fn run(app: &mut App) -> Result<()> {
     let mut last_tick = Instant::now();
 
     while !app.should_quit {
+        app.poll_sync_status();
         let size = guard.terminal.size()?;
         app.terminal_size = Rect::new(0, 0, size.width, size.height);
 

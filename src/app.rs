@@ -7,10 +7,9 @@ use crate::model::library::{Library, NovelInfo};
 use crate::model::novel::Novel;
 use crate::state::{AppState, SettingsMode};
 use crate::sync::config::WebDavConfig;
-use crate::sync::metadata::SyncMetadata;
-use crate::sync::sync_engine::SyncEngine;
+use crate::sync::sync_engine::{SyncEngine, SyncMessage};
 use crate::ui::sync_status::SyncStatus;
-use crate::ui::conflict_dialog::{ConflictDialog, ConflictResolution};
+use std::sync::mpsc::Receiver;
 
 /// 搜索相关状态
 #[derive(Default)]
@@ -120,18 +119,10 @@ pub struct App {
 
     /// WebDAV 配置
     pub webdav_config: WebDavConfig,
-    /// 同步元数据（版本号等）
-    pub sync_metadata: SyncMetadata,
-    /// 同步引擎
-    pub sync_engine: Option<SyncEngine>,
+    /// 同步消息接收端（后台线程通信）
+    pub sync_rx: Option<Receiver<SyncMessage>>,
     /// 同步状态显示
     pub sync_status: SyncStatus,
-    /// 是否显示冲突对话框
-    pub show_conflict_dialog: bool,
-    /// 冲突对话框状态
-    pub conflict_dialog: Option<ConflictDialog>,
-    /// 本地是否有未同步的变更
-    pub has_local_changes: bool,
 }
 
 impl App {
@@ -146,22 +137,8 @@ impl App {
         let novels_dir = Self::get_novels_dir();
         let novels = Self::load_novels_from_dir(&novels_dir)?;
 
-        // Load WebDAV config and sync metadata
+        // Load WebDAV config
         let webdav_config = WebDavConfig::load();
-        let sync_metadata = SyncMetadata::load();
-        
-        // Initialize sync engine if enabled
-        let sync_engine = if webdav_config.is_configured() {
-            match SyncEngine::new(&webdav_config) {
-                Ok(engine) => Some(engine),
-                Err(e) => {
-                    eprintln!("Failed to create sync engine: {}", e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
 
         let mut app = App {
             state: AppState::Bookshelf,
@@ -178,12 +155,8 @@ impl App {
             settings: SettingsState::default(),
             error_message: None,
             webdav_config,
-            sync_metadata,
-            sync_engine,
+            sync_rx: None,
             sync_status: SyncStatus::Idle,
-            show_conflict_dialog: false,
-            conflict_dialog: None,
-            has_local_changes: false,
         };
 
         // 检测孤立的小说记录
@@ -464,7 +437,6 @@ impl App {
             if let Err(e) = self.library.save() {
                 self.set_error(format!("Failed to save progress: {}", e));
             }
-            self.mark_local_changed();
         }
     }
 
@@ -493,136 +465,95 @@ impl App {
         current_idx
     }
 
-    /// Trigger manual sync
+    /// 手动上传同步（后台线程执行）
     pub fn trigger_sync(&mut self) {
-        if let Some(ref mut engine) = self.sync_engine {
-            self.sync_status = SyncStatus::Syncing;
-            match engine.sync_up(true) {
-                Ok(result) => {
-                    self.sync_status = SyncStatus::Success;
-                    self.has_local_changes = false;
-                    self.sync_metadata.version = result.new_version;
-                }
-                Err(e) => {
-                    self.sync_status = SyncStatus::Error;
-                    self.set_error(format!("Sync failed: {}", e));
-                }
-            }
-        }
-    }
-
-    /// Check for conflicts on startup
-    pub fn check_sync_conflicts(&mut self) -> bool {
-        if let Some(ref mut engine) = self.sync_engine {
-            match engine.check_conflicts() {
-                Ok(Some(conflict)) => {
-                    self.conflict_dialog = Some(ConflictDialog::new(
-                        conflict.local_version,
-                        conflict.remote_version,
-                    ));
-                    self.show_conflict_dialog = true;
-                    return true;
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    self.set_error(format!("Failed to check conflicts: {}", e));
-                }
-            }
-        }
-        false
-    }
-
-    /// Perform sync download
-    pub fn sync_down(&mut self) {
-        if let Some(ref mut engine) = self.sync_engine {
-            self.sync_status = SyncStatus::Syncing;
-            match engine.sync_down() {
-                Ok(result) => {
-                    if result.downloaded {
-                        self.sync_status = SyncStatus::Success;
-                        self.sync_metadata.version = result.new_version;
-                        // Reload novels after sync
-                        if let Ok(novels) = Self::load_novels_from_dir(&Self::get_novels_dir()) {
-                            self.novels = novels;
-                        }
-                    } else {
-                        self.sync_status = SyncStatus::Idle;
-                    }
-                }
-                Err(e) => {
-                    self.sync_status = SyncStatus::Error;
-                    self.set_error(format!("Download failed: {}", e));
-                }
-            }
-        }
-    }
-
-    /// Perform sync upload before exit
-    pub fn sync_up(&mut self) {
-        if !self.has_local_changes {
+        if self.sync_status.is_busy() {
             return;
         }
-        if let Some(ref mut engine) = self.sync_engine {
-            self.sync_status = SyncStatus::Syncing;
-            match engine.sync_up(false) {
-                Ok(_) => {
-                    self.has_local_changes = false;
-                }
+        if !self.webdav_config.is_configured() {
+            self.set_error("请先配置 WebDAV");
+            return;
+        }
+
+        let config = self.webdav_config.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.sync_rx = Some(rx);
+        self.sync_status = SyncStatus::InProgress("准备上传...".into());
+
+        std::thread::spawn(move || {
+            match SyncEngine::new(&config) {
+                Ok(engine) => engine.sync_up(&tx),
                 Err(e) => {
-                    eprintln!("Upload failed: {}", e);
+                    tx.send(SyncMessage::Failed(e.to_string())).ok();
+                }
+            }
+        });
+    }
+
+    /// 手动下载同步（后台线程执行）
+    pub fn trigger_download(&mut self) {
+        if self.sync_status.is_busy() {
+            return;
+        }
+        if !self.webdav_config.is_configured() {
+            self.set_error("请先配置 WebDAV");
+            return;
+        }
+
+        let config = self.webdav_config.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.sync_rx = Some(rx);
+        self.sync_status = SyncStatus::InProgress("准备下载...".into());
+
+        std::thread::spawn(move || {
+            match SyncEngine::new(&config) {
+                Ok(engine) => engine.sync_down(&tx),
+                Err(e) => {
+                    tx.send(SyncMessage::Failed(e.to_string())).ok();
+                }
+            }
+        });
+    }
+
+    /// 轮询同步状态（主循环中调用）
+    pub fn poll_sync_status(&mut self) {
+        let Some(rx) = &self.sync_rx else { return };
+
+        while let Ok(msg) = rx.try_recv() {
+            match msg {
+                SyncMessage::Progress(text) => {
+                    self.sync_status = SyncStatus::InProgress(text);
+                }
+                SyncMessage::UploadComplete => {
+                    self.sync_status = SyncStatus::Success("上传完成".into());
+                    self.sync_rx = None;
+                    return;
+                }
+                SyncMessage::DownloadComplete => {
+                    // 重新加载小说列表和阅读进度
+                    if let Ok(novels) = Self::load_novels_from_dir(&Self::get_novels_dir()) {
+                        self.novels = novels;
+                    }
+                    self.library = Library::load();
+                    self.sync_status = SyncStatus::Success("下载完成".into());
+                    self.sync_rx = None;
+                    return;
+                }
+                SyncMessage::Failed(err) => {
+                    self.sync_status = SyncStatus::Error(err);
+                    self.sync_rx = None;
+                    return;
                 }
             }
         }
-    }
-
-    /// Resolve conflict based on user choice
-    pub fn resolve_conflict(&mut self, resolution: ConflictResolution) {
-        match resolution {
-            ConflictResolution::UseLocal => {
-                self.trigger_sync();
-            }
-            ConflictResolution::UseRemote => {
-                self.sync_down();
-            }
-            ConflictResolution::Merge => {
-                // For now, just keep local
-                self.set_error("Merge not implemented, keeping local");
-            }
-        }
-        self.show_conflict_dialog = false;
-        self.conflict_dialog = None;
-    }
-
-    /// Mark that local data has changed
-    pub fn mark_local_changed(&mut self) {
-        self.has_local_changes = true;
     }
 
     /// Save WebDAV configuration
     pub fn save_webdav_config(&mut self) {
-        // Update the actual config with temporary config
         self.webdav_config = self.settings.webdav_config_state.temp_config.clone();
 
-        // Save to file
         if let Err(e) = self.webdav_config.save() {
             self.set_error(format!("Failed to save WebDAV config: {}", e));
-            return;
-        }
-
-        // Reinitialize sync engine if enabled
-        if self.webdav_config.is_configured() {
-            match SyncEngine::new(&self.webdav_config) {
-                Ok(engine) => {
-                    self.sync_engine = Some(engine);
-                    self.set_error("WebDAV配置已保存并生效");
-                }
-                Err(e) => {
-                    self.set_error(format!("Failed to create sync engine: {}", e));
-                }
-            }
-        } else {
-            self.sync_engine = None;
-            self.set_error("WebDAV配置已保存（已禁用）");
         }
     }
 }
@@ -649,12 +580,8 @@ mod tests {
             settings: SettingsState::default(),
             error_message: None,
             webdav_config: WebDavConfig::default(),
-            sync_metadata: SyncMetadata::default(),
-            sync_engine: None,
+            sync_rx: None,
             sync_status: SyncStatus::Idle,
-            show_conflict_dialog: false,
-            conflict_dialog: None,
-            has_local_changes: false,
         }
     }
 

@@ -57,39 +57,11 @@ pub fn render(f: &mut Frame, app: &App) {
     }
 
     let sync_widget = sync_status::SyncStatusWidget {
-        status: app.sync_status,
+        status: app.sync_status.clone(),
     };
     sync_widget.render(status_area, f.buffer_mut());
 
     if let Some(ref error_msg) = app.error_message {
         render_error_message(f, error_msg, area);
     }
-
-    if app.show_conflict_dialog {
-        if let Some(ref dialog) = app.conflict_dialog {
-            let popup_area = centered_rect(50, 30, area);
-            f.render_widget(ratatui::widgets::Clear, popup_area);
-            f.render_widget(dialog, popup_area);
-        }
-    }
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage((100 - percent_y) / 2),
-            Constraint::Percentage(percent_y),
-            Constraint::Percentage((100 - percent_y) / 2),
-        ])
-        .split(r);
-
-    Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage((100 - percent_x) / 2),
-            Constraint::Percentage(percent_x),
-            Constraint::Percentage((100 - percent_x) / 2),
-        ])
-        .split(popup_layout[1])[1]
 }

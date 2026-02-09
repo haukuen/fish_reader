@@ -55,6 +55,6 @@ pub fn render_bookshelf(f: &mut Frame, app: &App) {
     f.render_stateful_widget(novels_list, list_area, &mut state);
 
     // 创建帮助信息
-    let help_text = "↑/k: 上移  ↓/j: 下移  Enter: 选择  s: 设置  Esc/q: 退出";
+    let help_text = "↑/k: 上移  ↓/j: 下移  Enter: 选择  s: 设置  w: 上传  d: 下载  Esc/q: 退出";
     render_help_info(f, help_text, area);
 }
