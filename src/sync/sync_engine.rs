@@ -154,12 +154,11 @@ impl SyncEngine {
 
     fn load_local_manifest() -> SyncManifest {
         let path = Self::manifest_local_path();
-        if path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                if let Ok(manifest) = serde_json::from_str(&content) {
-                    return manifest;
-                }
-            }
+        if path.exists()
+            && let Ok(content) = std::fs::read_to_string(&path)
+            && let Ok(manifest) = serde_json::from_str(&content)
+        {
+            return manifest;
         }
         SyncManifest::new()
     }
@@ -208,11 +207,12 @@ impl SyncEngine {
                         .as_secs();
                     let size = meta.len();
 
-                    if let Some(old) = old_manifest.files.get(&key) {
-                        if old.mtime == mtime && old.size == size {
-                            files.insert(key, old.clone());
-                            continue;
-                        }
+                    if let Some(old) = old_manifest.files.get(&key)
+                        && old.mtime == mtime
+                        && old.size == size
+                    {
+                        files.insert(key, old.clone());
+                        continue;
                     }
 
                     let contents = std::fs::read(path)?;

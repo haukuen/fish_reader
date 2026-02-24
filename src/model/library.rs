@@ -24,7 +24,7 @@ pub struct NovelInfo {
     pub progress: ReadingProgress,
 }
 
-fn serialize_novel_path<S>(path: &PathBuf, serializer: S) -> Result<S::Ok, S::Error>
+fn serialize_novel_path<S>(path: &Path, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {

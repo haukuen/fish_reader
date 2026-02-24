@@ -100,10 +100,10 @@ fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
             app.state = app.previous_state.clone();
         }
         KeyCode::Enter => {
-            if let Some(index) = app.bookmark.selected_index {
-                if app.jump_to_bookmark(index).is_some() {
-                    app.state = AppState::Reading;
-                }
+            if let Some(index) = app.bookmark.selected_index
+                && app.jump_to_bookmark(index).is_some()
+            {
+                app.state = AppState::Reading;
             }
         }
         KeyCode::Up | KeyCode::Char('k') => {
@@ -121,14 +121,13 @@ fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
         KeyCode::Char('d') | KeyCode::Char('D') => {
             if let Some(index) = app.bookmark.selected_index
                 && app.remove_bookmark(index).is_some()
+                && let Some(bookmarks) = app.get_current_bookmarks()
             {
-                if let Some(bookmarks) = app.get_current_bookmarks() {
-                    app.bookmark.selected_index = if bookmarks.is_empty() {
-                        None
-                    } else {
-                        Some(index.min(bookmarks.len() - 1))
-                    };
-                }
+                app.bookmark.selected_index = if bookmarks.is_empty() {
+                    None
+                } else {
+                    Some(index.min(bookmarks.len() - 1))
+                };
             }
         }
         KeyCode::Char('a') | KeyCode::Char('A') => {
