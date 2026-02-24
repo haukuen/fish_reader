@@ -30,9 +30,9 @@ impl AppConfig {
             supported_extensions: &["txt"],
             progress_filename: "progress.json",
             backup_suffix: "backup",
-            backup_timestamp_interval: 600, // 10分钟
+            backup_timestamp_interval: 600,
             backup_retention_days: 3,
-            settings_menu_count: 2,
+            settings_menu_count: 3,
         }
     }
 }

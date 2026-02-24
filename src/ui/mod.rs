@@ -4,5 +4,6 @@ pub mod chapter_list;
 pub mod reader;
 pub mod search;
 pub mod settings;
+pub mod sync_status;
 pub mod utils;
 pub use utils::render;

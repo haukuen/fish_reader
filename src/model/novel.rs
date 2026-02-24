@@ -103,12 +103,10 @@ impl Novel {
         for (line_num, line) in self.lines.iter().enumerate() {
             let trimmed = line.trim();
 
-            // 跳过空行
             if trimmed.is_empty() {
                 continue;
             }
 
-            // 检查是否为章节标题
             if self.is_chapter_title(trimmed) {
                 self.chapters.push(Chapter {
                     title: trimmed.to_string(),
@@ -130,28 +128,23 @@ impl Novel {
     fn is_chapter_title(&self, line: &str) -> bool {
         let line = line.trim();
 
-        // 检查常见的章节标题模式
         let chapter_keywords = ['章', '回', '节', '卷', '部', '篇'];
         if line.starts_with("第")
             && let Some(keyword_pos) = line.find(chapter_keywords)
         {
             let start_index = "第".len();
-            // Ensure there is something between "第" and the keyword
             if keyword_pos > start_index {
                 let number_part = &line[start_index..keyword_pos];
-                // The part between "第" and the keyword should not contain whitespace
                 if !number_part.chars().any(|c| c.is_whitespace()) {
                     return true;
                 }
             }
         }
 
-        // 检查英文章节
         if line.to_lowercase().starts_with("chapter") {
             return true;
         }
 
-        // 检查特殊章节
         let special_chapters = [
             "序章", "序言", "楔子", "尾声", "后记", "番外", "终章", "结语", "引子", "开篇",
         ];
@@ -161,14 +154,12 @@ impl Novel {
             }
         }
 
-        // 检查数字+点号+章节名格式 (如 "001.网咖系统与看板娘")
         if let Some(dot_pos) = line.find('.')
             && dot_pos > 0
             && dot_pos < line.len() - 1
         {
             let number_part = &line[0..dot_pos];
             let title_part = &line[dot_pos + 1..];
-            // 数字部分全是数字，标题部分不为空且包含字母或中文字符
             if number_part.chars().all(|c| c.is_ascii_digit())
                 && !title_part.trim().is_empty()
                 && title_part.trim().chars().any(|c| c.is_alphabetic())
@@ -179,7 +170,6 @@ impl Novel {
             }
         }
 
-        // 检查纯数字章节 (如 "1." "2、")
         if line.len() <= 10 {
             let chars: Vec<char> = line.chars().collect();
             if chars.len() >= 2 {
@@ -193,7 +183,6 @@ impl Novel {
             }
         }
 
-        // 检查中文数字章节
         let chinese_numbers = [
             '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '百', '千', '万',
         ];
@@ -284,7 +273,6 @@ impl ReadingProgress {
     pub fn add_bookmark(&mut self, name: String, position: usize) {
         let bookmark = Bookmark::new(name, position);
         self.bookmarks.push(bookmark);
-        // 按位置排序书签
         self.bookmarks.sort_by(|a, b| a.position.cmp(&b.position));
     }
 
@@ -346,7 +334,6 @@ More content
 Chapter 2
 Final content"
             .to_string();
-        // 使用 set_content 同时设置 content 和 lines 缓存
         novel.set_content(content);
         novel.parse_chapters();
 
@@ -391,7 +378,6 @@ Final content"
         progress.add_bookmark("First".to_string(), 100);
         progress.add_bookmark("Third".to_string(), 300);
 
-        // 应按位置排序
         assert_eq!(progress.bookmarks.len(), 3);
         assert_eq!(progress.bookmarks[0].position, 100);
         assert_eq!(progress.bookmarks[0].name, "First");
@@ -431,7 +417,6 @@ Final content"
     fn test_is_chapter_title_edge_cases() {
         let novel = Novel::new(PathBuf::from("test.txt"));
 
-        // 边界情况
         assert!(!novel.is_chapter_title(""));
         assert!(!novel.is_chapter_title("   "));
         assert!(!novel.is_chapter_title("第"));
