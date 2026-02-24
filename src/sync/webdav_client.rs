@@ -64,7 +64,8 @@ impl WebDavClient {
         Ok(())
     }
 
-    pub fn download_bytes(&self, remote_path: &str) -> anyhow::Result<Vec<u8>> {
+    /// 下载文件，返回 Ok(Some(bytes)) 成功、Ok(None) 表示 404、Err 表示其他错误
+    pub fn download_bytes_opt(&self, remote_path: &str) -> anyhow::Result<Option<Vec<u8>>> {
         let url = format!("{}{}", self.base_url, remote_path);
 
         let request = self.client.get(&url);
@@ -76,11 +77,19 @@ impl WebDavClient {
 
         let response = request.send()?;
 
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
         if !response.status().is_success() {
             return Err(anyhow::anyhow!("Download failed: {}", response.status()));
         }
 
-        Ok(response.bytes()?.to_vec())
+        Ok(Some(response.bytes()?.to_vec()))
+    }
+
+    pub fn download_bytes(&self, remote_path: &str) -> anyhow::Result<Vec<u8>> {
+        self.download_bytes_opt(remote_path)?
+            .ok_or_else(|| anyhow::anyhow!("Download failed: 404 Not Found"))
     }
 
     pub fn test_connection(&self, remote_path: &str) -> anyhow::Result<()> {

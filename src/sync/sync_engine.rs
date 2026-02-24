@@ -2,7 +2,7 @@ use crate::sync::config::WebDavConfig;
 use crate::sync::webdav_client::WebDavClient;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc::Sender;
 
 /// 同步进度消息
@@ -137,6 +137,21 @@ impl SyncEngine {
         format!("{}/{}", self.remote_base(), filename)
     }
 
+    /// 校验 rel_path 不包含路径穿越，返回安全的本地路径
+    fn safe_local_path(data_dir: &Path, rel_path: &str) -> anyhow::Result<PathBuf> {
+        let rel = Path::new(rel_path);
+        for component in rel.components() {
+            match component {
+                Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                    anyhow::bail!("不安全的路径: {}", rel_path);
+                }
+                _ => {}
+            }
+        }
+        let full = data_dir.join(rel);
+        Ok(full)
+    }
+
     fn load_local_manifest() -> SyncManifest {
         let path = Self::manifest_local_path();
         if path.exists() {
@@ -158,12 +173,12 @@ impl SyncEngine {
 
     fn download_remote_manifest(&self) -> anyhow::Result<Option<SyncManifest>> {
         let remote_path = self.remote_file_path("manifest.json");
-        match self.client.download_bytes(&remote_path) {
-            Ok(bytes) => {
+        match self.client.download_bytes_opt(&remote_path)? {
+            Some(bytes) => {
                 let manifest: SyncManifest = serde_json::from_slice(&bytes)?;
                 Ok(Some(manifest))
             }
-            Err(_) => Ok(None),
+            None => Ok(None),
         }
     }
 
@@ -357,7 +372,7 @@ impl SyncEngine {
                         Self::merge_progress(&data_dir, &bytes)?;
                         downloaded_progress = true;
                     } else {
-                        let local_path = data_dir.join(rel_path);
+                        let local_path = Self::safe_local_path(&data_dir, rel_path)?;
                         if let Some(parent) = local_path.parent() {
                             std::fs::create_dir_all(parent)?;
                         }
@@ -376,7 +391,7 @@ impl SyncEngine {
                         display_name
                     )))
                     .ok();
-                    let local_path = data_dir.join(rel_path);
+                    let local_path = Self::safe_local_path(&data_dir, rel_path)?;
                     std::fs::remove_file(&local_path).ok();
                 }
                 DiffAction::Upload(_) => {}
