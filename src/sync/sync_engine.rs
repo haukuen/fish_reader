@@ -1,7 +1,7 @@
 use crate::sync::config::WebDavConfig;
 use crate::sync::webdav_client::WebDavClient;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
 use std::sync::mpsc::Sender;
 
@@ -274,10 +274,31 @@ impl SyncEngine {
         self.client.mkcol(&format!("{}/", base))?;
         self.client.mkcol(&format!("{}/novels/", base))?;
 
+        // 收集所有需要创建的远程父目录，避免嵌套路径上传失败
+        let mut created_dirs: HashSet<String> = HashSet::new();
+
         let total = actions.len();
         for (i, action) in actions.iter().enumerate() {
             match action {
                 DiffAction::Upload(rel_path) => {
+                    // 确保远程父目录存在
+                    if let Some(parent) = Path::new(rel_path).parent() {
+                        let parent_str = parent.to_string_lossy().replace('\\', "/");
+                        if !parent_str.is_empty() && created_dirs.insert(parent_str.clone()) {
+                            // 逐级创建父目录
+                            let mut cumulative = String::new();
+                            for segment in parent_str.split('/') {
+                                if cumulative.is_empty() {
+                                    cumulative = segment.to_string();
+                                } else {
+                                    cumulative = format!("{}/{}", cumulative, segment);
+                                }
+                                let remote_dir = format!("{}/{}/", base, cumulative);
+                                self.client.mkcol(&remote_dir)?;
+                            }
+                        }
+                    }
+
                     let display_name = Path::new(rel_path)
                         .file_name()
                         .unwrap_or_default()
@@ -435,8 +456,17 @@ impl SyncEngine {
             return Ok(());
         }
 
-        let local_content = std::fs::read_to_string(&progress_path)?;
-        let local: serde_json::Value = serde_json::from_str(&local_content)?;
+        let local: serde_json::Value = match std::fs::read_to_string(&progress_path)
+            .ok()
+            .and_then(|c| serde_json::from_str(&c).ok())
+        {
+            Some(v) => v,
+            None => {
+                // 本地损坏或不可读，直接用远程数据覆盖
+                std::fs::write(&progress_path, remote_bytes)?;
+                return Ok(());
+            }
+        };
 
         let merged = Self::merge_library_json(&local, &remote);
         let output = serde_json::to_string_pretty(&merged)?;
