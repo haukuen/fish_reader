@@ -501,11 +501,38 @@ impl SyncEngine {
             }
         }
 
+        for novel in &mut merged_novels {
+            Self::normalize_novel_json_path(novel);
+        }
+
         serde_json::json!({ "novels": merged_novels })
+    }
+
+    fn novels_rel_path(path: &str) -> Option<String> {
+        let parts: Vec<&str> = path.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+        let novels_idx = parts
+            .iter()
+            .rposition(|segment| segment.eq_ignore_ascii_case("novels"))?;
+        if novels_idx + 1 >= parts.len() {
+            return None;
+        }
+        Some(parts[novels_idx + 1..].join("/"))
+    }
+
+    fn normalize_novel_json_path(novel: &mut serde_json::Value) {
+        let Some(path_str) = novel.get("path").and_then(|p| p.as_str()) else {
+            return;
+        };
+        if let Some(rel) = Self::novels_rel_path(path_str) {
+            novel["path"] = serde_json::json!(format!("novels/{}", rel));
+        }
     }
 
     fn merge_novel(local: &serde_json::Value, remote: &serde_json::Value) -> serde_json::Value {
         let mut merged = remote.clone();
+        if let Some(local_path) = local.get("path") {
+            merged["path"] = local_path.clone();
+        }
 
         let local_offset = local
             .get("progress")
@@ -643,6 +670,7 @@ mod tests {
     fn test_merge_novel_uses_max_offset_and_dedup_bookmarks() {
         let local = serde_json::json!({
             "title": "A",
+            "path": "/local/.fish_reader/novels/A.txt",
             "progress": {
                 "scroll_offset": 200,
                 "bookmarks": [
@@ -653,6 +681,7 @@ mod tests {
         });
         let remote = serde_json::json!({
             "title": "A",
+            "path": "/remote/.fish_reader/novels/A.txt",
             "progress": {
                 "scroll_offset": 100,
                 "bookmarks": [
@@ -663,6 +692,9 @@ mod tests {
         });
 
         let merged = SyncEngine::merge_novel(&local, &remote);
+        let mut normalized = merged.clone();
+        SyncEngine::normalize_novel_json_path(&mut normalized);
+        assert_eq!(normalized["path"].as_str().unwrap(), "novels/A.txt");
         assert_eq!(merged["progress"]["scroll_offset"].as_u64().unwrap(), 200);
 
         let bookmarks = merged["progress"]["bookmarks"].as_array().unwrap();
@@ -678,14 +710,30 @@ mod tests {
     fn test_merge_library_json_merges_common_and_keeps_unique() {
         let local = serde_json::json!({
             "novels": [
-                {"title": "A", "progress": {"scroll_offset": 8, "bookmarks": []}},
-                {"title": "L-only", "progress": {"scroll_offset": 1, "bookmarks": []}}
+                {
+                    "title": "A",
+                    "path": "/local/.fish_reader/novels/A.txt",
+                    "progress": {"scroll_offset": 8, "bookmarks": []}
+                },
+                {
+                    "title": "L-only",
+                    "path": "/local/.fish_reader/novels/L-only.txt",
+                    "progress": {"scroll_offset": 1, "bookmarks": []}
+                }
             ]
         });
         let remote = serde_json::json!({
             "novels": [
-                {"title": "A", "progress": {"scroll_offset": 5, "bookmarks": []}},
-                {"title": "R-only", "progress": {"scroll_offset": 2, "bookmarks": []}}
+                {
+                    "title": "A",
+                    "path": "/remote/.fish_reader/novels/A.txt",
+                    "progress": {"scroll_offset": 5, "bookmarks": []}
+                },
+                {
+                    "title": "R-only",
+                    "path": "/remote/.fish_reader/novels/R-only.txt",
+                    "progress": {"scroll_offset": 2, "bookmarks": []}
+                }
             ]
         });
 
@@ -698,6 +746,17 @@ mod tests {
             .find(|n| n["title"].as_str() == Some("A"))
             .unwrap();
         assert_eq!(a["progress"]["scroll_offset"].as_u64().unwrap(), 8);
+        assert_eq!(a["path"].as_str().unwrap(), "novels/A.txt");
+        let l_only = novels
+            .iter()
+            .find(|n| n["title"].as_str() == Some("L-only"))
+            .unwrap();
+        assert_eq!(l_only["path"].as_str().unwrap(), "novels/L-only.txt");
+        let r_only = novels
+            .iter()
+            .find(|n| n["title"].as_str() == Some("R-only"))
+            .unwrap();
+        assert_eq!(r_only["path"].as_str().unwrap(), "novels/R-only.txt");
         assert!(novels.iter().any(|n| n["title"].as_str() == Some("L-only")));
         assert!(novels.iter().any(|n| n["title"].as_str() == Some("R-only")));
     }
