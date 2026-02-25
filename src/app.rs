@@ -228,6 +228,14 @@ impl App {
             }
         }
 
+        novels.sort_by(|a, b| {
+            a.title
+                .to_lowercase()
+                .cmp(&b.title.to_lowercase())
+                .then_with(|| a.title.cmp(&b.title))
+                .then_with(|| a.path.cmp(&b.path))
+        });
+
         Ok(novels)
     }
 
@@ -763,6 +771,24 @@ mod tests {
         assert_eq!(novels.len(), 1);
         assert_eq!(novels[0].title, "book_a");
         assert_eq!(novels[0].path, txt_path);
+    }
+
+    #[test]
+    fn test_load_novels_from_dir_sorts_by_title() {
+        let dir = tempdir().unwrap();
+        let z_path = dir.path().join("Zoo.txt");
+        let a_path = dir.path().join("apple.txt");
+        let b_path = dir.path().join("Book.txt");
+        std::fs::write(&z_path, "z").unwrap();
+        std::fs::write(&a_path, "a").unwrap();
+        std::fs::write(&b_path, "b").unwrap();
+
+        let novels = App::load_novels_from_dir(dir.path()).unwrap();
+
+        assert_eq!(novels.len(), 3);
+        assert_eq!(novels[0].path, a_path);
+        assert_eq!(novels[1].path, b_path);
+        assert_eq!(novels[2].path, z_path);
     }
 
     #[test]
