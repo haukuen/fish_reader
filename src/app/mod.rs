@@ -1,15 +1,20 @@
 use anyhow::Result;
 use ratatui::prelude::*;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::Receiver;
 
 use crate::config::CONFIG;
 use crate::model::library::{Library, NovelInfo};
 use crate::model::novel::Novel;
 use crate::state::{AppState, SettingsMode};
 use crate::sync::config::WebDavConfig;
-use crate::sync::sync_engine::{SyncEngine, SyncMessage};
+use crate::sync::sync_engine::SyncMessage;
 use crate::ui::sync_status::SyncStatus;
-use std::sync::mpsc::Receiver;
+
+mod bookmark;
+mod library_ops;
+mod search;
+mod sync_ops;
 
 /// 搜索相关状态
 #[derive(Default)]
@@ -128,6 +133,20 @@ pub struct App {
 }
 
 impl App {
+    #[cfg(test)]
+    fn get_test_data_dir() -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let thread_id = format!("{:?}", std::thread::current().id())
+            .replace(|c: char| !c.is_ascii_alphanumeric(), "_");
+        path.push(format!(
+            "{}_test_{}_{}",
+            CONFIG.dir_name,
+            std::process::id(),
+            thread_id
+        ));
+        path
+    }
+
     /// 初始化应用程序
     /// # 流程
     /// 1. 加载历史进度 2. 扫描小说目录（懒加载，不加载内容）
@@ -171,8 +190,7 @@ impl App {
     pub fn get_novels_dir() -> PathBuf {
         #[cfg(test)]
         {
-            let mut path = std::env::temp_dir();
-            path.push(format!("{}_test", CONFIG.dir_name));
+            let mut path = Self::get_test_data_dir();
             path.push("novels");
             let _ = std::fs::create_dir_all(&path);
             return path;
@@ -239,185 +257,6 @@ impl App {
         Ok(novels)
     }
 
-    /// 在当前小说内容中搜索关键词
-    ///
-    /// 执行不区分大小写的搜索，更新搜索结果列表。
-    ///
-    /// # Note
-    ///
-    /// 搜索输入为空时会清空结果列表。
-    pub fn perform_search(&mut self) {
-        if let Some(novel) = &self.current_novel {
-            if !self.search.input.is_empty() {
-                self.search.results.clear();
-
-                let search_term = self.search.input.to_lowercase();
-
-                for (line_num, line) in novel.lines().iter().enumerate() {
-                    if line.to_lowercase().contains(&search_term) {
-                        self.search.results.push((line_num, line.clone()));
-                    }
-                }
-
-                if !self.search.results.is_empty() {
-                    let should_reset = match self.search.selected_index {
-                        None => true,
-                        Some(idx) => idx >= self.search.results.len(),
-                    };
-                    if should_reset {
-                        self.search.selected_index = Some(0);
-                    }
-                } else {
-                    self.search.selected_index = None;
-                }
-            } else {
-                self.search.results.clear();
-                self.search.selected_index = None;
-            }
-        }
-    }
-
-    /// 根据当前阅读位置查找对应的章节索引
-    ///
-    /// # Returns
-    ///
-    /// 返回最接近当前阅读位置的章节索引。如果没有章节或当前未打开小说，返回 `None`。
-    pub fn find_current_chapter_index(&self) -> Option<usize> {
-        self.current_novel.as_ref().and_then(|novel| {
-            if novel.chapters.is_empty() {
-                return None;
-            }
-            Some(Self::find_chapter_index(
-                &novel.chapters,
-                novel.progress.scroll_offset,
-            ))
-        })
-    }
-
-    /// 检测孤立的小说记录
-    ///
-    /// 扫描 library 中所有小说记录，找出 JSON 中存在但文件已被删除的记录。
-    pub fn detect_orphaned_novels(&mut self) {
-        self.settings.orphaned_novels.clear();
-
-        for novel_info in &self.library.novels {
-            if !novel_info.path.exists() {
-                self.settings.orphaned_novels.push(novel_info.clone());
-            }
-        }
-
-        self.settings.selected_orphaned_index = None;
-    }
-
-    /// 删除指定索引的小说
-    ///
-    /// 执行以下操作：
-    /// 1. 删除物理文件
-    /// 2. 从 novels 列表中移除
-    /// 3. 从 library 中移除进度记录
-    /// 4. 保存 library 更改
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - 要删除的小说在 novels 列表中的索引
-    ///
-    /// # Errors
-    ///
-    /// 如果文件删除或保存失败则返回错误。
-    pub fn delete_novel(&mut self, index: usize) -> Result<()> {
-        if index < self.novels.len() {
-            let novel = &self.novels[index];
-
-            if novel.path.exists() {
-                std::fs::remove_file(&novel.path)?;
-            }
-
-            self.library.novels.retain(|n| n.path != novel.path);
-
-            self.novels.remove(index);
-
-            self.library.save()?;
-
-            if !self.novels.is_empty() {
-                let new_index = index.min(self.novels.len() - 1);
-                self.settings.selected_delete_novel_index = Some(new_index);
-            } else {
-                self.settings.selected_delete_novel_index = None;
-            }
-        }
-        Ok(())
-    }
-
-    /// 在当前小说的阅读位置添加书签
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - 书签名称
-    pub fn add_bookmark(&mut self, name: String) {
-        if let Some(novel) = &mut self.current_novel {
-            let position = novel.progress.scroll_offset;
-            novel.progress.add_bookmark(name, position);
-            self.save_current_progress();
-        }
-    }
-
-    /// 删除当前小说的指定书签
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - 要删除的书签索引
-    ///
-    /// # Returns
-    ///
-    /// 如果删除成功返回 `Some(())`，如果索引无效或当前无小说则返回 `None`。
-    pub fn remove_bookmark(&mut self, index: usize) -> Option<()> {
-        if let Some(novel) = &mut self.current_novel
-            && novel.progress.remove_bookmark(index).is_some()
-        {
-            self.save_current_progress();
-            Some(())
-        } else {
-            None
-        }
-    }
-
-    /// 跳转到指定书签位置
-    ///
-    /// # Arguments
-    ///
-    /// * `index` - 要跳转的书签索引
-    ///
-    /// # Returns
-    ///
-    /// 如果跳转成功返回 `Some(())`，如果索引无效或当前无小说则返回 `None`。
-    pub fn jump_to_bookmark(&mut self, index: usize) -> Option<()> {
-        if let Some(novel) = &mut self.current_novel
-            && let Some(bookmark) = novel.progress.bookmarks.get(index)
-        {
-            novel.progress.scroll_offset = bookmark.position;
-            self.save_current_progress();
-            Some(())
-        } else {
-            None
-        }
-    }
-
-    /// 获取当前小说的书签列表
-    ///
-    /// # Returns
-    ///
-    /// 如果当前有打开的小说则返回其书签列表的引用，否则返回 `None`。
-    pub fn get_current_bookmarks(&self) -> Option<&Vec<crate::model::novel::Bookmark>> {
-        self.current_novel
-            .as_ref()
-            .map(|novel| &novel.progress.bookmarks)
-    }
-
-    /// 清空书签输入框内容
-    pub fn clear_bookmark_inputs(&mut self) {
-        self.bookmark.clear_input();
-    }
-
     /// 设置错误消息
     ///
     /// 错误消息将在下一帧渲染时显示给用户。
@@ -427,122 +266,6 @@ impl App {
     /// * `msg` - 错误消息内容
     pub fn set_error(&mut self, msg: impl Into<String>) {
         self.error_message = Some(msg.into());
-    }
-
-    /// 保存当前小说的阅读进度
-    ///
-    /// 更新并保存当前小说的进度。如果保存失败，会设置错误消息。
-    pub fn save_current_progress(&mut self) {
-        if let Some(novel) = &self.current_novel {
-            self.library
-                .update_novel_progress(&novel.path, novel.progress.clone());
-            if let Err(e) = self.library.save() {
-                self.set_error(format!("Failed to save progress: {}", e));
-            }
-        }
-    }
-
-    /// 查找指定行所在的章节索引
-    ///
-    /// # Arguments
-    ///
-    /// * `chapters` - 章节列表
-    /// * `current_line` - 当前行号
-    ///
-    /// # Returns
-    ///
-    /// 最接近当前行的章节索引（即 `start_line` 小于等于 `current_line` 的最大索引）。
-    pub fn find_chapter_index(
-        chapters: &[crate::model::novel::Chapter],
-        current_line: usize,
-    ) -> usize {
-        let mut current_idx = 0;
-        for (index, chapter) in chapters.iter().enumerate() {
-            if chapter.start_line <= current_line {
-                current_idx = index;
-            } else {
-                break;
-            }
-        }
-        current_idx
-    }
-
-    /// 手动上传同步（后台线程执行）
-    pub fn trigger_sync(&mut self) {
-        if self.sync_status.is_busy() {
-            return;
-        }
-        if !self.webdav_config.is_configured() {
-            self.set_error("请先配置 WebDAV");
-            return;
-        }
-
-        let config = self.webdav_config.clone();
-        let (tx, rx) = std::sync::mpsc::channel();
-        self.sync_rx = Some(rx);
-        self.sync_status = SyncStatus::InProgress("准备上传...".into());
-
-        std::thread::spawn(move || match SyncEngine::new(&config) {
-            Ok(engine) => engine.sync_up(&tx),
-            Err(e) => {
-                tx.send(SyncMessage::Failed(e.to_string())).ok();
-            }
-        });
-    }
-
-    /// 手动下载同步（后台线程执行）
-    pub fn trigger_download(&mut self) {
-        if self.sync_status.is_busy() {
-            return;
-        }
-        if !self.webdav_config.is_configured() {
-            self.set_error("请先配置 WebDAV");
-            return;
-        }
-
-        let config = self.webdav_config.clone();
-        let (tx, rx) = std::sync::mpsc::channel();
-        self.sync_rx = Some(rx);
-        self.sync_status = SyncStatus::InProgress("准备下载...".into());
-
-        std::thread::spawn(move || match SyncEngine::new(&config) {
-            Ok(engine) => engine.sync_down(&tx),
-            Err(e) => {
-                tx.send(SyncMessage::Failed(e.to_string())).ok();
-            }
-        });
-    }
-
-    /// 轮询同步状态（主循环中调用）
-    pub fn poll_sync_status(&mut self) {
-        let Some(rx) = &self.sync_rx else { return };
-
-        while let Ok(msg) = rx.try_recv() {
-            match msg {
-                SyncMessage::Progress(text) => {
-                    self.sync_status = SyncStatus::InProgress(text);
-                }
-                SyncMessage::UploadComplete => {
-                    self.sync_status = SyncStatus::Success("上传完成".into());
-                    self.sync_rx = None;
-                    return;
-                }
-                SyncMessage::DownloadComplete => {
-                    if let Ok(novels) = Self::load_novels_from_dir(&Self::get_novels_dir()) {
-                        self.novels = novels;
-                    }
-                    self.library = Library::load();
-                    self.sync_status = SyncStatus::Success("下载完成".into());
-                    self.sync_rx = None;
-                    return;
-                }
-                SyncMessage::Failed(err) => {
-                    self.sync_status = SyncStatus::Error(err);
-                    self.sync_rx = None;
-                    return;
-                }
-            }
-        }
     }
 
     /// Save WebDAV configuration

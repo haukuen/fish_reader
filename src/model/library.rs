@@ -47,6 +47,20 @@ where
 }
 
 impl Library {
+    #[cfg(test)]
+    fn get_test_data_dir() -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let thread_id = format!("{:?}", std::thread::current().id())
+            .replace(|c: char| !c.is_ascii_alphanumeric(), "_");
+        path.push(format!(
+            "{}_test_{}_{}",
+            CONFIG.dir_name,
+            std::process::id(),
+            thread_id
+        ));
+        path
+    }
+
     /// 创建新的空图书馆
     ///
     /// # Returns
@@ -148,8 +162,7 @@ impl Library {
     pub fn get_progress_path() -> PathBuf {
         #[cfg(test)]
         {
-            let mut path = std::env::temp_dir();
-            path.push(format!("{}_test", CONFIG.dir_name));
+            let mut path = Self::get_test_data_dir();
             let _ = std::fs::create_dir_all(&path);
             path.push(CONFIG.progress_filename);
             return path;
@@ -174,8 +187,7 @@ impl Library {
     fn get_novels_dir() -> PathBuf {
         #[cfg(test)]
         {
-            let mut path = std::env::temp_dir();
-            path.push(format!("{}_test", CONFIG.dir_name));
+            let mut path = Self::get_test_data_dir();
             path.push("novels");
             let _ = std::fs::create_dir_all(&path);
             return path;
@@ -575,5 +587,14 @@ mod tests {
         assert!(has_corrupted_backup);
 
         clean_progress_artifacts(&progress_path);
+    }
+
+    #[test]
+    fn test_progress_path_isolated_across_threads() {
+        let current = Library::get_progress_path();
+        let other = std::thread::spawn(Library::get_progress_path)
+            .join()
+            .unwrap();
+        assert_ne!(current, other);
     }
 }
