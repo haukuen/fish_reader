@@ -2,8 +2,14 @@ use crate::sync::config::WebDavConfig;
 use crate::sync::webdav_client::WebDavClient;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::{Component, Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc::Sender;
+
+mod diff;
+mod io;
+mod merge;
+
+use diff::{DiffAction, diff_for_download, diff_for_upload};
 
 /// 同步进度消息
 pub enum SyncMessage {
@@ -41,56 +47,6 @@ impl SyncManifest {
     }
 }
 
-enum DiffAction {
-    Upload(String),
-    Delete(String),
-    Download(String),
-}
-
-fn diff_for_upload(
-    local: &HashMap<String, FileEntry>,
-    remote: &HashMap<String, FileEntry>,
-) -> Vec<DiffAction> {
-    let mut actions = Vec::new();
-
-    for (path, local_entry) in local {
-        match remote.get(path) {
-            Some(remote_entry) if remote_entry.hash == local_entry.hash => {}
-            _ => actions.push(DiffAction::Upload(path.clone())),
-        }
-    }
-
-    for path in remote.keys() {
-        if !local.contains_key(path) {
-            actions.push(DiffAction::Delete(path.clone()));
-        }
-    }
-
-    actions
-}
-
-fn diff_for_download(
-    local: &HashMap<String, FileEntry>,
-    remote: &HashMap<String, FileEntry>,
-) -> Vec<DiffAction> {
-    let mut actions = Vec::new();
-
-    for (path, remote_entry) in remote {
-        match local.get(path) {
-            Some(local_entry) if local_entry.hash == remote_entry.hash => {}
-            _ => actions.push(DiffAction::Download(path.clone())),
-        }
-    }
-
-    for path in local.keys() {
-        if !remote.contains_key(path) {
-            actions.push(DiffAction::Delete(path.clone()));
-        }
-    }
-
-    actions
-}
-
 pub struct SyncEngine {
     client: WebDavClient,
     config: WebDavConfig,
@@ -117,137 +73,6 @@ impl SyncEngine {
         if let Err(e) = self.do_sync_down(tx) {
             tx.send(SyncMessage::Failed(e.to_string())).ok();
         }
-    }
-
-    fn data_dir() -> PathBuf {
-        home::home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join(".fish_reader")
-    }
-
-    fn manifest_local_path() -> PathBuf {
-        Self::data_dir().join("sync_manifest.json")
-    }
-
-    fn remote_base(&self) -> String {
-        self.config.remote_path.trim_end_matches('/').to_string()
-    }
-
-    fn remote_file_path(&self, filename: &str) -> String {
-        format!("{}/{}", self.remote_base(), filename)
-    }
-
-    /// 校验 rel_path 不包含路径穿越，返回安全的本地路径
-    fn safe_local_path(data_dir: &Path, rel_path: &str) -> anyhow::Result<PathBuf> {
-        let rel = Path::new(rel_path);
-        for component in rel.components() {
-            match component {
-                Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                    anyhow::bail!("不安全的路径: {}", rel_path);
-                }
-                _ => {}
-            }
-        }
-        let full = data_dir.join(rel);
-        Ok(full)
-    }
-
-    fn load_local_manifest() -> SyncManifest {
-        let path = Self::manifest_local_path();
-        if path.exists()
-            && let Ok(content) = std::fs::read_to_string(&path)
-            && let Ok(manifest) = serde_json::from_str(&content)
-        {
-            return manifest;
-        }
-        SyncManifest::new()
-    }
-
-    fn save_local_manifest(manifest: &SyncManifest) -> anyhow::Result<()> {
-        let path = Self::manifest_local_path();
-        let content = serde_json::to_string_pretty(manifest)?;
-        std::fs::write(path, content)?;
-        Ok(())
-    }
-
-    fn download_remote_manifest(&self) -> anyhow::Result<Option<SyncManifest>> {
-        let remote_path = self.remote_file_path("manifest.json");
-        match self.client.download_bytes_opt(&remote_path)? {
-            Some(bytes) => {
-                let manifest: SyncManifest = serde_json::from_slice(&bytes)?;
-                Ok(Some(manifest))
-            }
-            None => Ok(None),
-        }
-    }
-
-    fn upload_manifest(&self, manifest: &SyncManifest) -> anyhow::Result<()> {
-        let remote_path = self.remote_file_path("manifest.json");
-        let data = serde_json::to_string_pretty(manifest)?;
-        self.client.upload_bytes(data.as_bytes(), &remote_path)
-    }
-
-    /// 扫描本地文件，构建清单。mtime 未变时复用旧哈希避免读取大文件。
-    fn scan_local_files(old_manifest: &SyncManifest) -> anyhow::Result<HashMap<String, FileEntry>> {
-        let data_dir = Self::data_dir();
-        let mut files = HashMap::new();
-
-        let novels_dir = data_dir.join("novels");
-        if novels_dir.exists() {
-            for entry in walkdir::WalkDir::new(&novels_dir) {
-                let entry = entry?;
-                let path = entry.path();
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("txt") {
-                    let relative = path.strip_prefix(&data_dir)?;
-                    let key = relative.to_string_lossy().replace('\\', "/");
-                    let meta = std::fs::metadata(path)?;
-                    let mtime = meta
-                        .modified()?
-                        .duration_since(std::time::UNIX_EPOCH)?
-                        .as_secs();
-                    let size = meta.len();
-
-                    if let Some(old) = old_manifest.files.get(&key)
-                        && old.mtime == mtime
-                        && old.size == size
-                    {
-                        files.insert(key, old.clone());
-                        continue;
-                    }
-
-                    let contents = std::fs::read(path)?;
-                    let hash = crc32fast::hash(&contents);
-                    files.insert(key, FileEntry { hash, size, mtime });
-                }
-            }
-        }
-
-        let progress_path = data_dir.join("progress.json");
-        if progress_path.exists() {
-            let meta = std::fs::metadata(&progress_path)?;
-            let mtime = meta
-                .modified()?
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs();
-            let size = meta.len();
-
-            let key = "progress.json".to_string();
-            if let Some(old) = old_manifest.files.get(&key) {
-                if old.mtime == mtime && old.size == size {
-                    files.insert(key, old.clone());
-                } else {
-                    let contents = std::fs::read(&progress_path)?;
-                    let hash = crc32fast::hash(&contents);
-                    files.insert(key, FileEntry { hash, size, mtime });
-                }
-            } else {
-                let contents = std::fs::read(&progress_path)?;
-                let hash = crc32fast::hash(&contents);
-                files.insert(key, FileEntry { hash, size, mtime });
-            }
-        }
-
-        Ok(files)
     }
 
     fn do_sync_up(&self, tx: &Sender<SyncMessage>) -> anyhow::Result<()> {
@@ -444,176 +269,11 @@ impl SyncEngine {
         tx.send(SyncMessage::DownloadComplete).ok();
         Ok(())
     }
-
-    /// 合并远程 progress.json 与本地：取较大的 scroll_offset，书签取并集
-    fn merge_progress(data_dir: &Path, remote_bytes: &[u8]) -> anyhow::Result<()> {
-        let progress_path = data_dir.join("progress.json");
-
-        let remote: serde_json::Value = serde_json::from_slice(remote_bytes)?;
-
-        if !progress_path.exists() {
-            std::fs::write(&progress_path, remote_bytes)?;
-            return Ok(());
-        }
-
-        let local: serde_json::Value = match std::fs::read_to_string(&progress_path)
-            .ok()
-            .and_then(|c| serde_json::from_str(&c).ok())
-        {
-            Some(v) => v,
-            None => {
-                // 本地损坏或不可读，直接用远程数据覆盖
-                std::fs::write(&progress_path, remote_bytes)?;
-                return Ok(());
-            }
-        };
-
-        let merged = Self::merge_library_json(&local, &remote);
-        let output = serde_json::to_string_pretty(&merged)?;
-        std::fs::write(&progress_path, output)?;
-
-        Ok(())
-    }
-
-    /// 按小说合并 Library JSON：取较大 scroll_offset，书签取并集
-    fn merge_library_json(
-        local: &serde_json::Value,
-        remote: &serde_json::Value,
-    ) -> serde_json::Value {
-        let empty_arr = serde_json::Value::Array(vec![]);
-
-        let local_novels = local
-            .get("novels")
-            .unwrap_or(&empty_arr)
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-        let remote_novels = remote
-            .get("novels")
-            .unwrap_or(&empty_arr)
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-
-        let mut local_map: HashMap<String, serde_json::Value> = HashMap::new();
-        for novel in &local_novels {
-            if let Some(title) = novel.get("title").and_then(|t| t.as_str()) {
-                local_map.insert(title.to_string(), novel.clone());
-            }
-        }
-
-        let mut merged_novels: Vec<serde_json::Value> = Vec::new();
-        let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
-
-        for remote_novel in &remote_novels {
-            let title = remote_novel
-                .get("title")
-                .and_then(|t| t.as_str())
-                .unwrap_or("")
-                .to_string();
-            seen_titles.insert(title.clone());
-
-            if let Some(local_novel) = local_map.get(&title) {
-                merged_novels.push(Self::merge_novel(local_novel, remote_novel));
-            } else {
-                merged_novels.push(remote_novel.clone());
-            }
-        }
-
-        for local_novel in &local_novels {
-            let title = local_novel
-                .get("title")
-                .and_then(|t| t.as_str())
-                .unwrap_or("")
-                .to_string();
-            if !seen_titles.contains(&title) {
-                merged_novels.push(local_novel.clone());
-            }
-        }
-
-        for novel in &mut merged_novels {
-            Self::normalize_novel_json_path(novel);
-        }
-
-        serde_json::json!({ "novels": merged_novels })
-    }
-
-    fn novels_rel_path(path: &str) -> Option<String> {
-        let parts: Vec<&str> = path.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
-        let novels_idx = parts
-            .iter()
-            .rposition(|segment| segment.eq_ignore_ascii_case("novels"))?;
-        if novels_idx + 1 >= parts.len() {
-            return None;
-        }
-        Some(parts[novels_idx + 1..].join("/"))
-    }
-
-    fn normalize_novel_json_path(novel: &mut serde_json::Value) {
-        let Some(path_str) = novel.get("path").and_then(|p| p.as_str()) else {
-            return;
-        };
-        if let Some(rel) = Self::novels_rel_path(path_str) {
-            novel["path"] = serde_json::json!(format!("novels/{}", rel));
-        }
-    }
-
-    fn merge_novel(local: &serde_json::Value, remote: &serde_json::Value) -> serde_json::Value {
-        let mut merged = remote.clone();
-        if let Some(local_path) = local.get("path") {
-            merged["path"] = local_path.clone();
-        }
-
-        let local_offset = local
-            .get("progress")
-            .and_then(|p| p.get("scroll_offset"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let remote_offset = remote
-            .get("progress")
-            .and_then(|p| p.get("scroll_offset"))
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let max_offset = local_offset.max(remote_offset);
-
-        let empty_arr = serde_json::Value::Array(vec![]);
-        let local_bookmarks = local
-            .get("progress")
-            .and_then(|p| p.get("bookmarks"))
-            .unwrap_or(&empty_arr)
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-        let remote_bookmarks = remote
-            .get("progress")
-            .and_then(|p| p.get("bookmarks"))
-            .unwrap_or(&empty_arr)
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-
-        let mut seen_positions: std::collections::HashSet<u64> = std::collections::HashSet::new();
-        let mut merged_bookmarks: Vec<serde_json::Value> = Vec::new();
-
-        for bm in remote_bookmarks.iter().chain(local_bookmarks.iter()) {
-            let pos = bm.get("position").and_then(|p| p.as_u64()).unwrap_or(0);
-            if seen_positions.insert(pos) {
-                merged_bookmarks.push(bm.clone());
-            }
-        }
-        merged_bookmarks.sort_by_key(|bm| bm.get("position").and_then(|p| p.as_u64()).unwrap_or(0));
-
-        if let Some(progress) = merged.get_mut("progress") {
-            progress["scroll_offset"] = serde_json::json!(max_offset);
-            progress["bookmarks"] = serde_json::json!(merged_bookmarks);
-        }
-
-        merged
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::diff::{DiffAction, diff_for_download, diff_for_upload};
     use super::*;
 
     fn entry(hash: u32) -> FileEntry {
