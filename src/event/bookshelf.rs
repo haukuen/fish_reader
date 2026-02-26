@@ -47,6 +47,7 @@ pub(super) fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
             }
         }
         KeyCode::Char('s') | KeyCode::Char('S') => {
+            app.settings.reset();
             app.detect_orphaned_novels();
             app.state = AppState::Settings;
         }

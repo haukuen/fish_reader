@@ -65,6 +65,8 @@ fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
                     1 => {
                         app.settings.mode = SettingsMode::DeleteOrphaned;
                         app.detect_orphaned_novels();
+                        app.settings.selected_orphaned_index =
+                            navigate_list(None, app.settings.orphaned_novels.len(), false);
                     }
                     2 => {
                         app.settings.mode = SettingsMode::WebDavConfig;
@@ -224,11 +226,6 @@ fn handle_webdav_config_key(app: &mut App, key: KeyCode) {
             KeyCode::Down => {
                 if config_state.selected_field < 4 {
                     config_state.selected_field += 1;
-                }
-            }
-            KeyCode::Tab => {
-                if config_state.selected_field == 0 {
-                    config_state.temp_config.enabled = !config_state.temp_config.enabled;
                 }
             }
             KeyCode::Char('p') | KeyCode::Char('P') => {

@@ -288,6 +288,18 @@ mod tests {
     }
 
     #[test]
+    fn test_handle_key_bookshelf_settings_defaults_to_first_option() {
+        let mut app = create_test_app();
+        app.state = AppState::Bookshelf;
+        app.settings.selected_option = None;
+
+        handle_key(&mut app, KeyCode::Char('s'));
+
+        assert!(app.state == AppState::Settings);
+        assert_eq!(app.settings.selected_option, Some(0));
+    }
+
+    #[test]
     fn test_handle_key_esc_from_search_returns_reading() {
         let mut app = create_test_app();
         app.state = AppState::Searching;

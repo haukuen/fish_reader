@@ -90,7 +90,7 @@ impl SettingsState {
     /// 重置设置状态到主菜单
     pub fn reset(&mut self) {
         self.mode = SettingsMode::MainMenu;
-        self.selected_option = None;
+        self.selected_option = Some(0);
         self.webdav_config_state = WebDavConfigState::default();
     }
 }
@@ -133,6 +133,10 @@ pub struct App {
 }
 
 impl App {
+    fn first_index_if_any(len: usize) -> Option<usize> {
+        if len == 0 { None } else { Some(0) }
+    }
+
     #[cfg(test)]
     fn get_test_data_dir() -> PathBuf {
         let mut path = std::env::temp_dir();
@@ -158,11 +162,13 @@ impl App {
 
         let webdav_config = WebDavConfig::load();
 
+        let selected_novel_index = Self::first_index_if_any(novels.len());
+
         let mut app = App {
             state: AppState::Bookshelf,
             library,
             novels,
-            selected_novel_index: None,
+            selected_novel_index,
             current_novel: None,
             should_quit: false,
             terminal_size: Rect::default(),
@@ -461,7 +467,13 @@ mod tests {
         settings.reset();
 
         assert_eq!(settings.mode, SettingsMode::MainMenu);
-        assert!(settings.selected_option.is_none());
+        assert_eq!(settings.selected_option, Some(0));
+    }
+
+    #[test]
+    fn test_first_index_if_any() {
+        assert_eq!(App::first_index_if_any(0), None);
+        assert_eq!(App::first_index_if_any(3), Some(0));
     }
 
     #[test]

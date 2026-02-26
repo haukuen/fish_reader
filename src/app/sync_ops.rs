@@ -68,6 +68,7 @@ impl App {
                 SyncMessage::DownloadComplete => {
                     if let Ok(novels) = Self::load_novels_from_dir(&Self::get_novels_dir()) {
                         self.novels = novels;
+                        self.selected_novel_index = Self::first_index_if_any(self.novels.len());
                     }
                     self.library = Library::load();
                     self.sync_status = SyncStatus::Success("下载完成".into());

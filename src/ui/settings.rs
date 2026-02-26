@@ -334,7 +334,7 @@ fn render_webdav_config(f: &mut Frame, app: &App, area: Rect) {
     let help_text = if edit_mode {
         "输入文本 | Enter: 确认 | Esc: 取消编辑"
     } else {
-        "↑/↓: 选择字段 | Enter: 编辑 | Tab: 切换启用 | S: 保存 | T: 测试连接 | P: 切换密码显示 | Esc: 返回 | q: 退出"
+        "↑/↓: 选择字段 | Enter: 编辑/切换启用 | S: 保存 | T: 测试连接 | P: 切换密码显示 | Esc: 返回 | q: 退出"
     };
     render_help_info(f, help_text, area);
 }
