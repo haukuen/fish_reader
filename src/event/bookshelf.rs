@@ -13,16 +13,12 @@ use super::navigate_list;
 ///
 /// # Behavior
 ///
-/// - `Esc`/`q`: 退出应用
 /// - `Enter`: 打开选中的小说
 /// - `Up`/`k`: 向上选择
 /// - `Down`/`j`: 向下选择
 /// - `s`: 进入设置页面
 pub(super) fn handle_bookshelf_key(app: &mut App, key: KeyCode) {
     match key {
-        KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
-            app.should_quit = true;
-        }
         KeyCode::Up | KeyCode::Char('k') => {
             app.selected_novel_index =
                 navigate_list(app.selected_novel_index, app.novels.len(), true);

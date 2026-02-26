@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::config::CONFIG;
-use crate::state::{AppState, SettingsMode};
+use crate::state::SettingsMode;
 use crate::sync::webdav_client::WebDavClient;
 use crossterm::event::KeyCode;
 
@@ -32,16 +32,11 @@ pub(super) fn handle_settings_key(app: &mut App, key: KeyCode) {
 ///
 /// # Behavior
 ///
-/// - `Esc`/`q`: 返回书架
 /// - `Up`/`k`: 向上选择
 /// - `Down`/`j`: 向下选择
 /// - `Enter`: 进入选中的子菜单
 fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
     match key {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            app.state = AppState::Bookshelf;
-            app.settings.reset();
-        }
         KeyCode::Up | KeyCode::Char('k') => {
             app.settings.selected_option = navigate_list(
                 app.settings.selected_option,
@@ -95,15 +90,11 @@ fn handle_settings_main_menu_key(app: &mut App, key: KeyCode) {
 ///
 /// # Behavior
 ///
-/// - `Esc`/`q`: 返回设置主菜单
 /// - `Up`/`k`: 向上选择
 /// - `Down`/`j`: 向下选择
 /// - `d`: 删除选中的小说
 fn handle_delete_novel_key(app: &mut App, key: KeyCode) {
     match key {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            app.settings.mode = SettingsMode::MainMenu;
-        }
         KeyCode::Up | KeyCode::Char('k') => {
             app.settings.selected_delete_novel_index = navigate_list(
                 app.settings.selected_delete_novel_index,
@@ -139,15 +130,11 @@ fn handle_delete_novel_key(app: &mut App, key: KeyCode) {
 ///
 /// # Behavior
 ///
-/// - `Esc`/`q`: 返回设置主菜单
 /// - `Up`/`k`: 向上选择
 /// - `Down`/`j`: 向下选择
 /// - `d`: 删除选中的孤立记录
 fn handle_delete_orphaned_key(app: &mut App, key: KeyCode) {
     match key {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            app.settings.mode = SettingsMode::MainMenu;
-        }
         KeyCode::Up | KeyCode::Char('k') => {
             app.settings.selected_orphaned_index = navigate_list(
                 app.settings.selected_orphaned_index,
@@ -229,9 +216,6 @@ fn handle_webdav_config_key(app: &mut App, key: KeyCode) {
         }
     } else {
         match key {
-            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-                app.settings.mode = SettingsMode::MainMenu;
-            }
             KeyCode::Up => {
                 if config_state.selected_field > 0 {
                     config_state.selected_field -= 1;

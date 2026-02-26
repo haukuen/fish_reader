@@ -133,6 +133,6 @@ pub fn render_search(f: &mut Frame, app: &App) {
         f.render_stateful_widget(results_list, results_area, &mut state);
     }
 
-    let help_text = "输入搜索内容 | ↑/↓: 选择结果 | Enter: 跳转 | Esc/q: 返回";
+    let help_text = "输入搜索内容 | ↑/↓: 选择结果 | Enter: 跳转 | Esc: 返回阅读";
     render_help_info(f, help_text, area);
 }

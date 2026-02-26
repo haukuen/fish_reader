@@ -13,8 +13,6 @@ use super::count_physical_lines;
 ///
 /// # Behavior
 ///
-/// - `q`: 退出应用（保存进度）
-/// - `Esc`: 返回书架（保存进度）
 /// - `Up`/`k`: 向上滚动一行
 /// - `Down`/`j`: 向下滚动一行
 /// - `Left`/`h`: 向上翻页
@@ -37,14 +35,6 @@ pub(super) fn handle_reader_key(app: &mut App, key: KeyCode) {
         let page_size = content_height.max(1);
 
         match key {
-            KeyCode::Char('q') | KeyCode::Char('Q') => {
-                app.save_current_progress();
-                app.should_quit = true;
-            }
-            KeyCode::Esc => {
-                app.save_current_progress();
-                app.state = AppState::Bookshelf;
-            }
             KeyCode::Up | KeyCode::Char('k') => {
                 if novel.progress.scroll_offset > 0 {
                     novel.progress.scroll_offset -= 1;

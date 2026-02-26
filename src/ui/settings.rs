@@ -64,7 +64,7 @@ fn render_settings_main_menu(f: &mut Frame, app: &App, area: Rect) {
 
     f.render_stateful_widget(menu_list, list_area, &mut state);
 
-    let help_text = "↑/↓: 选择选项 | Enter: 确认 | Esc/q: 返回书架";
+    let help_text = "↑/↓: 选择选项 | Enter: 确认 | Esc: 返回书架 | q: 退出";
     render_help_info(f, help_text, area);
 }
 
@@ -140,9 +140,9 @@ fn render_delete_novel_menu(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let help_text = if app.novels.is_empty() {
-        "Esc/q: 返回设置菜单"
+        "Esc: 返回设置菜单 | q: 退出"
     } else {
-        "↑/↓: 选择小说 | D/d: 删除选中小说 | Esc/q: 返回设置菜单"
+        "↑/↓: 选择小说 | D/d: 删除选中小说 | Esc: 返回设置菜单 | q: 退出"
     };
     render_help_info(f, help_text, area);
 }
@@ -220,9 +220,9 @@ fn render_delete_orphaned_menu(f: &mut Frame, app: &App, area: Rect) {
     }
 
     let help_text = if app.settings.orphaned_novels.is_empty() {
-        "Esc/q: 返回设置菜单"
+        "Esc: 返回设置菜单 | q: 退出"
     } else {
-        "↑/↓: 选择记录 | D/d: 删除选中记录 | Esc/q: 返回设置菜单"
+        "↑/↓: 选择记录 | D/d: 删除选中记录 | Esc: 返回设置菜单 | q: 退出"
     };
     render_help_info(f, help_text, area);
 }
@@ -334,7 +334,7 @@ fn render_webdav_config(f: &mut Frame, app: &App, area: Rect) {
     let help_text = if edit_mode {
         "输入文本 | Enter: 确认 | Esc: 取消编辑"
     } else {
-        "↑/↓: 选择字段 | Enter: 编辑 | Tab: 切换启用 | S: 保存 | T: 测试连接 | P: 切换密码显示 | Esc: 返回"
+        "↑/↓: 选择字段 | Enter: 编辑 | Tab: 切换启用 | S: 保存 | T: 测试连接 | P: 切换密码显示 | Esc: 返回 | q: 退出"
     };
     render_help_info(f, help_text, area);
 }

@@ -11,6 +11,59 @@ mod reader;
 mod search;
 mod settings;
 
+fn is_text_input_mode(app: &App) -> bool {
+    match app.state {
+        AppState::Searching | AppState::BookmarkAdd => true,
+        AppState::Settings => {
+            app.settings.mode == crate::state::SettingsMode::WebDavConfig
+                && app.settings.webdav_config_state.edit_mode
+        }
+        _ => false,
+    }
+}
+
+fn handle_back(app: &mut App) {
+    match app.state {
+        AppState::Bookshelf => {
+            app.should_quit = true;
+        }
+        AppState::Reading => {
+            app.save_current_progress();
+            app.state = AppState::Bookshelf;
+        }
+        AppState::Searching => {
+            app.state = AppState::Reading;
+        }
+        AppState::ChapterList => {
+            app.state = AppState::Reading;
+        }
+        AppState::BookmarkList => {
+            app.state = AppState::Reading;
+        }
+        AppState::BookmarkAdd => {
+            app.clear_bookmark_inputs();
+            app.state = AppState::BookmarkList;
+        }
+        AppState::Settings => match app.settings.mode {
+            crate::state::SettingsMode::MainMenu => {
+                app.state = AppState::Bookshelf;
+                app.settings.reset();
+            }
+            crate::state::SettingsMode::DeleteNovel
+            | crate::state::SettingsMode::DeleteOrphaned => {
+                app.settings.mode = crate::state::SettingsMode::MainMenu;
+            }
+            crate::state::SettingsMode::WebDavConfig => {
+                if app.settings.webdav_config_state.edit_mode {
+                    app.settings.webdav_config_state.edit_mode = false;
+                } else {
+                    app.settings.mode = crate::state::SettingsMode::MainMenu;
+                }
+            }
+        },
+    }
+}
+
 /// 计算字符串在指定宽度下占用的物理行数
 ///
 /// # Arguments
@@ -75,6 +128,17 @@ pub fn handle_key(app: &mut App, key: KeyCode) {
         app.sync_status = SyncStatus::Idle;
     }
 
+    if matches!(key, KeyCode::Esc) {
+        handle_back(app);
+        return;
+    }
+
+    if matches!(key, KeyCode::Char('q') | KeyCode::Char('Q')) && !is_text_input_mode(app) {
+        app.save_current_progress();
+        app.should_quit = true;
+        return;
+    }
+
     match app.state {
         AppState::Bookshelf => bookshelf::handle_bookshelf_key(app, key),
         AppState::Reading => reader::handle_reader_key(app, key),
@@ -124,7 +188,7 @@ mod tests {
     use crate::app::{App, BookmarkState, SearchState, SettingsState};
     use crate::model::library::Library;
     use crate::model::novel::Novel;
-    use crate::state::AppState;
+    use crate::state::{AppState, SettingsMode};
     use crate::sync::config::WebDavConfig;
     use crossterm::event::{KeyModifiers, MouseEvent};
     use ratatui::layout::Rect;
@@ -219,6 +283,54 @@ mod tests {
             app.current_novel.as_ref().unwrap().progress.scroll_offset,
             7
         );
+    }
+
+    #[test]
+    fn test_handle_key_esc_from_search_returns_reading() {
+        let mut app = create_test_app();
+        app.state = AppState::Searching;
+        app.previous_state = AppState::Bookshelf;
+
+        handle_key(&mut app, KeyCode::Esc);
+
+        assert!(app.state == AppState::Reading);
+    }
+
+    #[test]
+    fn test_handle_key_esc_from_bookmark_add_returns_bookmark_list_and_clears_input() {
+        let mut app = create_test_app();
+        app.state = AppState::BookmarkAdd;
+        app.bookmark.input = "abc".to_string();
+
+        handle_key(&mut app, KeyCode::Esc);
+
+        assert!(app.state == AppState::BookmarkList);
+        assert!(app.bookmark.input.is_empty());
+    }
+
+    #[test]
+    fn test_handle_key_esc_in_webdav_edit_mode_only_exit_edit_mode() {
+        let mut app = create_test_app();
+        app.state = AppState::Settings;
+        app.settings.mode = SettingsMode::WebDavConfig;
+        app.settings.webdav_config_state.edit_mode = true;
+
+        handle_key(&mut app, KeyCode::Esc);
+
+        assert!(app.state == AppState::Settings);
+        assert!(app.settings.mode == SettingsMode::WebDavConfig);
+        assert!(!app.settings.webdav_config_state.edit_mode);
+    }
+
+    #[test]
+    fn test_handle_key_q_in_search_is_text_input_not_quit() {
+        let mut app = create_test_app();
+        app.state = AppState::Searching;
+
+        handle_key(&mut app, KeyCode::Char('q'));
+
+        assert!(!app.should_quit);
+        assert_eq!(app.search.input, "q");
     }
 
     #[test]

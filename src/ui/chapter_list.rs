@@ -85,6 +85,6 @@ pub fn render_chapter_list(f: &mut Frame, app: &App) {
         }
     }
 
-    let help_text = "↑/↓: 选择章节 | Enter: 跳转到章节 | Esc/q: 返回阅读";
+    let help_text = "↑/↓: 选择章节 | Enter: 跳转到章节 | Esc: 返回阅读 | q: 退出";
     render_help_info(f, help_text, area);
 }

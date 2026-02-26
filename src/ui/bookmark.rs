@@ -111,9 +111,9 @@ fn render_bookmark_list(f: &mut Frame, app: &App) {
     }
 
     let help_text = if app.get_current_bookmarks().is_none_or(|b| b.is_empty()) {
-        "a: 添加书签 | Esc/q: 返回阅读"
+        "a: 添加书签 | Esc: 返回阅读 | q: 退出"
     } else {
-        "↑/↓: 选择书签 | Enter: 跳转 | d: 删除 | a: 添加 | Esc/q: 返回阅读"
+        "↑/↓: 选择书签 | Enter: 跳转 | d: 删除 | a: 添加 | Esc: 返回阅读 | q: 退出"
     };
     render_help_info(f, help_text, area);
 }
@@ -172,6 +172,6 @@ fn render_bookmark_add(f: &mut Frame, app: &App) {
 
     f.render_widget(name_input, name_area);
 
-    let help_text = "输入书签名称 | Enter: 确认添加 | Esc/q: 取消";
+    let help_text = "输入书签名称 | Enter: 确认添加 | Esc: 取消并返回列表";
     render_help_info(f, help_text, area);
 }

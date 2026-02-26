@@ -13,7 +13,6 @@ use super::navigate_list;
 ///
 /// # Behavior
 ///
-/// - `Esc`/`q`: 返回上一个状态
 /// - `Enter`: 跳转到选中的书签
 /// - `Up`/`k`: 向上选择
 /// - `Down`/`j`: 向下选择
@@ -21,9 +20,6 @@ use super::navigate_list;
 /// - `a`: 进入添加书签模式
 pub(super) fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
     match key {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            app.state = app.previous_state.clone();
-        }
         KeyCode::Enter => {
             if let Some(index) = app.bookmark.selected_index
                 && app.jump_to_bookmark(index).is_some()
@@ -72,16 +68,11 @@ pub(super) fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
 ///
 /// # Behavior
 ///
-/// - `Esc`/`q`: 取消添加，返回上一个状态
 /// - `Enter`: 确认添加书签
 /// - `Backspace`: 删除输入的最后一个字符
 /// - 其他字符: 添加到输入框
 pub(super) fn handle_bookmark_add_key(app: &mut App, key: KeyCode) {
     match key {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            app.state = app.previous_state.clone();
-            app.clear_bookmark_inputs();
-        }
         KeyCode::Enter => {
             if !app.bookmark.input.trim().is_empty() {
                 app.add_bookmark(app.bookmark.input.clone());

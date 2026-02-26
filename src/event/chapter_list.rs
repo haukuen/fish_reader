@@ -13,15 +13,11 @@ use super::navigate_list;
 ///
 /// # Behavior
 ///
-/// - `Esc`/`q`: 返回阅读模式
 /// - `Enter`: 跳转到选中的章节
 /// - `Up`/`k`: 向上选择
 /// - `Down`/`j`: 向下选择
 pub(super) fn handle_chapter_list_key(app: &mut App, key: KeyCode) {
     match key {
-        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-            app.state = app.previous_state.clone();
-        }
         KeyCode::Enter => {
             if let Some(index) = app.selected_chapter_index
                 && let Some(novel) = &mut app.current_novel
