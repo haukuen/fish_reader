@@ -103,7 +103,9 @@ pub(super) fn navigate_list(current: Option<usize>, len: usize, move_up: bool) -
     }
 
     let new_idx = if move_up {
-        current.map(|idx| idx.saturating_sub(1)).unwrap_or(len - 1)
+        current
+            .map(|idx| if idx == 0 { len - 1 } else { idx - 1 })
+            .unwrap_or(len - 1)
     } else {
         current.map(|idx| (idx + 1) % len).unwrap_or(0)
     };
@@ -252,7 +254,7 @@ mod tests {
     #[test]
     fn test_navigate_list_wrap_and_empty() {
         assert_eq!(navigate_list(None, 3, false), Some(0));
-        assert_eq!(navigate_list(Some(0), 3, true), Some(0));
+        assert_eq!(navigate_list(Some(0), 3, true), Some(2));
         assert_eq!(navigate_list(Some(2), 3, false), Some(0));
         assert_eq!(navigate_list(Some(0), 0, false), None);
     }
