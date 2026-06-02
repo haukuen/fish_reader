@@ -402,6 +402,7 @@ mod tests {
         let progress = ReadingProgress {
             scroll_offset: 100,
             bookmarks: Vec::new(),
+            line_spacing: 0,
         };
 
         library.update_novel_progress(&novel_path, progress.clone());
@@ -412,6 +413,7 @@ mod tests {
         let new_progress = ReadingProgress {
             scroll_offset: 200,
             bookmarks: Vec::new(),
+            line_spacing: 0,
         };
         library.update_novel_progress(&novel_path, new_progress.clone());
         assert_eq!(library.get_novel_progress(&novel_path), new_progress);
@@ -431,6 +433,7 @@ mod tests {
         let progress = ReadingProgress {
             scroll_offset: 50,
             bookmarks: Vec::new(),
+            line_spacing: 0,
         };
 
         library.update_novel_progress(&path, progress.clone());
@@ -459,6 +462,7 @@ mod tests {
             progress: ReadingProgress {
                 scroll_offset: 123,
                 bookmarks: Vec::new(),
+                line_spacing: 0,
             },
         });
 
@@ -476,6 +480,7 @@ mod tests {
             progress: ReadingProgress {
                 scroll_offset: 10,
                 bookmarks: Vec::new(),
+                line_spacing: 0,
             },
         });
 
@@ -483,6 +488,7 @@ mod tests {
         let new_progress = ReadingProgress {
             scroll_offset: 456,
             bookmarks: Vec::new(),
+            line_spacing: 0,
         };
         library.update_novel_progress(&local_path, new_progress.clone());
 
@@ -545,6 +551,7 @@ mod tests {
             ReadingProgress {
                 scroll_offset: 42,
                 bookmarks: Vec::new(),
+                line_spacing: 0,
             },
         );
         library.save().unwrap();

@@ -23,6 +23,8 @@ use super::count_physical_lines;
 /// - `m`: 添加书签
 /// - `[`: 跳转到上一章
 /// - `]`: 跳转到下一章
+/// - `-`/`_`: 减小行间距
+/// - `=`/`+`: 增大行间距
 pub(super) fn handle_reader_key(app: &mut App, key: KeyCode) {
     if let Some(novel) = &mut app.current_novel {
         let max_scroll = novel.line_count().saturating_sub(1);
@@ -32,18 +34,18 @@ pub(super) fn handle_reader_key(app: &mut App, key: KeyCode) {
             .saturating_sub(1)
             .saturating_sub(2)
             .saturating_sub(1);
-        let page_size = content_height.max(1);
+        let spacing = novel.progress.line_spacing;
+        let line_physical_height = (spacing + 1).max(1);
+        let page_size = (content_height / line_physical_height).max(1);
 
         match key {
-            KeyCode::Up | KeyCode::Char('k') => {
-                if novel.progress.scroll_offset > 0 {
-                    novel.progress.scroll_offset -= 1;
-                }
+            KeyCode::Up | KeyCode::Char('k') if novel.progress.scroll_offset > 0 => {
+                novel.progress.scroll_offset -= 1;
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if novel.progress.scroll_offset < max_scroll.saturating_sub(page_size) {
-                    novel.progress.scroll_offset += 1;
-                }
+            KeyCode::Down | KeyCode::Char('j')
+                if novel.progress.scroll_offset < max_scroll.saturating_sub(page_size) =>
+            {
+                novel.progress.scroll_offset += 1;
             }
             KeyCode::Left | KeyCode::Char('h') => {
                 let mut physical_lines_in_prev_page = 0;
@@ -105,25 +107,29 @@ pub(super) fn handle_reader_key(app: &mut App, key: KeyCode) {
                 app.state = AppState::BookmarkAdd;
                 app.clear_bookmark_inputs();
             }
-            KeyCode::Char('[') => {
-                if !novel.chapters.is_empty() {
-                    let current_idx =
-                        App::find_chapter_index(&novel.chapters, novel.progress.scroll_offset);
-                    if current_idx > 0 {
-                        novel.progress.scroll_offset = novel.chapters[current_idx - 1].start_line;
-                        app.save_current_progress();
-                    }
+            KeyCode::Char('[') if !novel.chapters.is_empty() => {
+                let current_idx =
+                    App::find_chapter_index(&novel.chapters, novel.progress.scroll_offset);
+                if current_idx > 0 {
+                    novel.progress.scroll_offset = novel.chapters[current_idx - 1].start_line;
+                    app.save_current_progress();
                 }
             }
-            KeyCode::Char(']') => {
-                if !novel.chapters.is_empty() {
-                    let current_idx =
-                        App::find_chapter_index(&novel.chapters, novel.progress.scroll_offset);
-                    if current_idx + 1 < novel.chapters.len() {
-                        novel.progress.scroll_offset = novel.chapters[current_idx + 1].start_line;
-                        app.save_current_progress();
-                    }
+            KeyCode::Char(']') if !novel.chapters.is_empty() => {
+                let current_idx =
+                    App::find_chapter_index(&novel.chapters, novel.progress.scroll_offset);
+                if current_idx + 1 < novel.chapters.len() {
+                    novel.progress.scroll_offset = novel.chapters[current_idx + 1].start_line;
+                    app.save_current_progress();
                 }
+            }
+            KeyCode::Char('-') | KeyCode::Char('_') if novel.progress.line_spacing > 0 => {
+                novel.progress.line_spacing -= 1;
+                app.save_current_progress();
+            }
+            KeyCode::Char('=') | KeyCode::Char('+') if novel.progress.line_spacing < 5 => {
+                novel.progress.line_spacing += 1;
+                app.save_current_progress();
             }
             _ => {}
         }

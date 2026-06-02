@@ -259,6 +259,9 @@ pub struct ReadingProgress {
     pub scroll_offset: usize,
     #[serde(default)]
     pub bookmarks: Vec<Bookmark>,
+    /// 行间距（每行之间的额外空行数），范围 0..=5
+    #[serde(default)]
+    pub line_spacing: usize,
 }
 
 impl ReadingProgress {
@@ -273,7 +276,7 @@ impl ReadingProgress {
     pub fn add_bookmark(&mut self, name: String, position: usize) {
         let bookmark = Bookmark::new(name, position);
         self.bookmarks.push(bookmark);
-        self.bookmarks.sort_by(|a, b| a.position.cmp(&b.position));
+        self.bookmarks.sort_by_key(|a| a.position);
     }
 
     /// 删除书签

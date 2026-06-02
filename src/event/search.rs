@@ -30,25 +30,21 @@ pub(super) fn handle_search_key(app: &mut App, key: KeyCode) {
                 app.state = AppState::Reading;
             }
         }
-        KeyCode::Up => {
-            if !app.search.results.is_empty() {
-                let current = app.search.selected_index.unwrap_or(0);
-                let next = if current > 0 {
-                    current - 1
-                } else {
-                    app.search.results.len() - 1
-                };
-                app.search.selected_index = Some(next);
-            }
+        KeyCode::Up if !app.search.results.is_empty() => {
+            let current = app.search.selected_index.unwrap_or(0);
+            let next = if current > 0 {
+                current - 1
+            } else {
+                app.search.results.len() - 1
+            };
+            app.search.selected_index = Some(next);
         }
-        KeyCode::Down => {
-            if !app.search.results.is_empty() {
-                let next = match app.search.selected_index {
-                    None => 0,
-                    Some(current) => (current + 1) % app.search.results.len(),
-                };
-                app.search.selected_index = Some(next);
-            }
+        KeyCode::Down if !app.search.results.is_empty() => {
+            let next = match app.search.selected_index {
+                None => 0,
+                Some(current) => (current + 1) % app.search.results.len(),
+            };
+            app.search.selected_index = Some(next);
         }
         KeyCode::Backspace => {
             app.search.input.pop();

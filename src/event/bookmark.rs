@@ -73,12 +73,10 @@ pub(super) fn handle_bookmark_list_key(app: &mut App, key: KeyCode) {
 /// - 其他字符: 添加到输入框
 pub(super) fn handle_bookmark_add_key(app: &mut App, key: KeyCode) {
     match key {
-        KeyCode::Enter => {
-            if !app.bookmark.input.trim().is_empty() {
-                app.add_bookmark(app.bookmark.input.clone());
-                app.state = AppState::BookmarkList;
-                app.clear_bookmark_inputs();
-            }
+        KeyCode::Enter if !app.bookmark.input.trim().is_empty() => {
+            app.add_bookmark(app.bookmark.input.clone());
+            app.state = AppState::BookmarkList;
+            app.clear_bookmark_inputs();
         }
         KeyCode::Backspace => {
             app.bookmark.input.pop();

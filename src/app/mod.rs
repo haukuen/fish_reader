@@ -355,18 +355,21 @@ mod tests {
         app.current_novel.as_mut().unwrap().progress = ReadingProgress {
             scroll_offset: 5,
             bookmarks: Vec::new(),
+            line_spacing: 0,
         };
         assert_eq!(app.find_current_chapter_index(), Some(0));
 
         app.current_novel.as_mut().unwrap().progress = ReadingProgress {
             scroll_offset: 15,
             bookmarks: Vec::new(),
+            line_spacing: 0,
         };
         assert_eq!(app.find_current_chapter_index(), Some(1));
 
         app.current_novel.as_mut().unwrap().progress = ReadingProgress {
             scroll_offset: 25,
             bookmarks: Vec::new(),
+            line_spacing: 0,
         };
         assert_eq!(app.find_current_chapter_index(), Some(2));
     }

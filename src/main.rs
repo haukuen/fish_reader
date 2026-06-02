@@ -77,10 +77,8 @@ fn run(app: &mut App) -> Result<()> {
 
         if crossterm_event::poll(timeout)? {
             match crossterm_event::read()? {
-                Event::Key(key) => {
-                    if key.kind == KeyEventKind::Press {
-                        event::handle_key(app, key.code);
-                    }
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    event::handle_key(app, key.code);
                 }
                 Event::Mouse(mouse) => {
                     event::handle_mouse(app, mouse);

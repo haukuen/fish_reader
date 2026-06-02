@@ -218,15 +218,11 @@ fn handle_webdav_config_key(app: &mut App, key: KeyCode) {
         }
     } else {
         match key {
-            KeyCode::Up => {
-                if config_state.selected_field > 0 {
-                    config_state.selected_field -= 1;
-                }
+            KeyCode::Up if config_state.selected_field > 0 => {
+                config_state.selected_field -= 1;
             }
-            KeyCode::Down => {
-                if config_state.selected_field < 4 {
-                    config_state.selected_field += 1;
-                }
+            KeyCode::Down if config_state.selected_field < 4 => {
+                config_state.selected_field += 1;
             }
             KeyCode::Char('p') | KeyCode::Char('P') => {
                 config_state.show_password = !config_state.show_password;
