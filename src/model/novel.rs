@@ -91,113 +91,9 @@ impl Novel {
 
     /// 解析章节目录
     ///
-    /// 从小说内容中自动识别章节标题，支持多种常见格式：
-    /// - 中文章节：第X章/回/节/卷/部/篇
-    /// - 英文章节：Chapter X
-    /// - 特殊章节：序章、楔子、尾声、番外等
-    /// - 数字格式：001.章节名、1.章节名
-    /// - 中文数字：一、二、
+    /// 使用两阶段解析（候选分类 + 弱候选评分），委托给 `chapter_parser::parse`。
     pub fn parse_chapters(&mut self) {
-        self.chapters.clear();
-
-        for (line_num, line) in self.lines.iter().enumerate() {
-            let trimmed = line.trim();
-
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            if self.is_chapter_title(trimmed) {
-                self.chapters.push(Chapter {
-                    title: trimmed.to_string(),
-                    start_line: line_num,
-                });
-            }
-        }
-    }
-
-    /// 判断一行文本是否为章节标题
-    ///
-    /// # Arguments
-    ///
-    /// * `line` - 待检查的文本行
-    ///
-    /// # Returns
-    ///
-    /// 如果是章节标题返回 `true`，否则返回 `false`。
-    fn is_chapter_title(&self, line: &str) -> bool {
-        let line = line.trim();
-
-        let chapter_keywords = ['章', '回', '节', '卷', '部', '篇'];
-        if line.starts_with("第")
-            && let Some(keyword_pos) = line.find(chapter_keywords)
-        {
-            let start_index = "第".len();
-            if keyword_pos > start_index {
-                let number_part = &line[start_index..keyword_pos];
-                if !number_part.chars().any(|c| c.is_whitespace()) {
-                    return true;
-                }
-            }
-        }
-
-        if line.to_lowercase().starts_with("chapter") {
-            return true;
-        }
-
-        let special_chapters = [
-            "序章", "序言", "楔子", "尾声", "后记", "番外", "终章", "结语", "引子", "开篇",
-        ];
-        for special in &special_chapters {
-            if line.starts_with(special) {
-                return true;
-            }
-        }
-
-        if let Some(dot_pos) = line.find('.')
-            && dot_pos > 0
-            && dot_pos < line.len() - 1
-        {
-            let number_part = &line[0..dot_pos];
-            let title_part = &line[dot_pos + 1..];
-            if number_part.chars().all(|c| c.is_ascii_digit())
-                && !title_part.trim().is_empty()
-                && title_part.trim().chars().any(|c| c.is_alphabetic())
-                && !number_part.is_empty()
-                && number_part.len() <= 6
-            {
-                return true;
-            }
-        }
-
-        if line.len() <= 10 {
-            let chars: Vec<char> = line.chars().collect();
-            if chars.len() >= 2 {
-                let first_part = &chars[0..chars.len() - 1];
-                let last_char = chars[chars.len() - 1];
-                if first_part.iter().all(|c| c.is_ascii_digit())
-                    && (last_char == '.' || last_char == '、')
-                {
-                    return true;
-                }
-            }
-        }
-
-        let chinese_numbers = [
-            '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '百', '千', '万',
-        ];
-        let chars: Vec<char> = line.chars().collect();
-        if chars.len() > 1 && chars.len() <= 10 {
-            let last_char = chars[chars.len() - 1];
-            if last_char == '、' || last_char == '.' {
-                let first_part = &chars[0..chars.len() - 1];
-                if first_part.iter().all(|c| chinese_numbers.contains(c)) {
-                    return true;
-                }
-            }
-        }
-
-        false
+        self.chapters = crate::model::chapter_parser::parse(&self.lines);
     }
 }
 
@@ -310,23 +206,6 @@ mod tests {
     }
 
     #[test]
-    fn test_is_chapter_title() {
-        let novel = Novel::new(PathBuf::from("test.txt"));
-        assert!(novel.is_chapter_title("第一章 标题"));
-        assert!(novel.is_chapter_title("第100回"));
-        assert!(novel.is_chapter_title("Chapter 1: The Beginning"));
-        assert!(novel.is_chapter_title("序章"));
-        assert!(novel.is_chapter_title("123."));
-        assert!(novel.is_chapter_title("一二三、"));
-        assert!(novel.is_chapter_title("001.网咖系统与看板娘"));
-        assert!(novel.is_chapter_title("1.开始"));
-        assert!(novel.is_chapter_title("999.结束"));
-        assert!(!novel.is_chapter_title("This is a normal line."));
-        assert!(!novel.is_chapter_title("第一 章"));
-        assert!(!novel.is_chapter_title(".无数字开头"));
-    }
-
-    #[test]
     fn test_parse_chapters() {
         let mut novel = Novel::new(PathBuf::from("test.txt"));
         let content = "序章
@@ -414,18 +293,5 @@ Final content"
         assert_eq!(bookmark.name, "Test");
         assert_eq!(bookmark.position, 42);
         assert!(bookmark.timestamp > 0);
-    }
-
-    #[test]
-    fn test_is_chapter_title_edge_cases() {
-        let novel = Novel::new(PathBuf::from("test.txt"));
-
-        assert!(!novel.is_chapter_title(""));
-        assert!(!novel.is_chapter_title("   "));
-        assert!(!novel.is_chapter_title("第"));
-        assert!(novel.is_chapter_title("后记"));
-        assert!(novel.is_chapter_title("番外"));
-        assert!(novel.is_chapter_title("楔子"));
-        assert!(novel.is_chapter_title("尾声"));
     }
 }
